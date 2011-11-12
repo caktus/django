@@ -781,7 +781,7 @@ class SQLInsertCompiler(SQLCompiler):
 
     def __init__(self, *args, **kwargs):
         self.return_id = False
-        super(SQLCompiler, self).__init__(*args, **kwargs)
+        super(SQLInsertCompiler, self).__init__(*args, **kwargs)
 
     def placeholder(self, field, val):
         if field is None:
