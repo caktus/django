@@ -879,6 +879,11 @@ View
         The default implementation returns ``HttpResponseNotAllowed`` with list
         of allowed methods in plain text.
 
+    **Context**
+
+    * ``view``: The template context of all class-based generic views will
+      include a ``view`` variable that points to the ``View`` instance.
+
 TemplateView
 ~~~~~~~~~~~~
 .. class:: TemplateView()
