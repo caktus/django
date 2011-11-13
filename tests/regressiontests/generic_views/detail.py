@@ -11,7 +11,7 @@ class DetailViewTest(TestCase):
     fixtures = ['generic-views-test-data.json']
     urls = 'regressiontests.generic_views.urls'
 
-    def test_view_in_context(self):
+    def test_view_in_template_context(self):
         res = self.client.get('/detail/obj/')
         self.assertTrue(isinstance(res.context['view'], View))
 

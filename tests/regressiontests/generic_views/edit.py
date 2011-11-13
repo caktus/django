@@ -23,7 +23,6 @@ class CreateViewTests(TestCase):
         res = self.client.get('/edit/authors/create/')
         self.assertEqual(res.status_code, 200)
         self.assertTrue(isinstance(res.context['form'], forms.ModelForm))
-        self.assertTrue('view' in res.context)
         self.assertFalse('object' in res.context)
         self.assertFalse('author' in res.context)
         self.assertTemplateUsed(res, 'generic_views/author_form.html')

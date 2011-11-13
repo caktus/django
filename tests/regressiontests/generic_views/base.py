@@ -209,7 +209,7 @@ class TemplateViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['params'], {'foo': 'bar'})
 
-    def test_template_context_includes_view(self):
+    def test_view_in_template_context(self):
         """
         A generic template view includes the 'view' in the context.
         """

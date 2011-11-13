@@ -160,7 +160,7 @@ class ListViewTests(TestCase):
     def test_missing_items(self):
         self.assertRaises(ImproperlyConfigured, self.client.get, '/list/authors/invalid/')
 
-    def test_update_view_in_context(self):
+    def test_view_in_context(self):
         res = self.client.get('/list/authors/')
         self.assertEqual(res.status_code, 200)
         self.assertTrue(isinstance(res.context['view'], View))
