@@ -1,7 +1,7 @@
 from django.forms import models as model_forms
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponseRedirect
-from django.views.generic.base import TemplateResponseMixin, View, ViewProxy
+from django.views.generic.base import TemplateResponseMixin, View
 from django.views.generic.detail import (SingleObjectMixin,
                         SingleObjectTemplateResponseMixin, BaseDetailView)
 
@@ -46,7 +46,7 @@ class FormMixin(object):
         return kwargs
 
     def get_context_data(self, **kwargs):
-        context = {'view': ViewProxy(self)}
+        context = {'view': self}
         context.update(kwargs)
         return context
 
@@ -115,7 +115,7 @@ class ModelFormMixin(FormMixin, SingleObjectMixin):
         return super(ModelFormMixin, self).form_valid(form)
 
     def get_context_data(self, **kwargs):
-        context = {'view': ViewProxy(self)}
+        context = {'view': self}
         context.update(kwargs)
         if self.object:
             context['object'] = self.object

@@ -3,7 +3,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.http import Http404
 from django.utils.encoding import smart_str
 from django.utils.translation import ugettext as _
-from django.views.generic.base import TemplateResponseMixin, View, ViewProxy
+from django.views.generic.base import TemplateResponseMixin, View
 
 
 class MultipleObjectMixin(object):
@@ -95,7 +95,7 @@ class MultipleObjectMixin(object):
                 'page_obj': page,
                 'is_paginated': is_paginated,
                 'object_list': queryset,
-                'view': ViewProxy(self)
+                'view': self
             }
         else:
             context = {
@@ -103,7 +103,7 @@ class MultipleObjectMixin(object):
                 'page_obj': None,
                 'is_paginated': False,
                 'object_list': queryset,
-                'view': ViewProxy(self)
+                'view': self
             }
         context.update(kwargs)
         if context_object_name is not None:

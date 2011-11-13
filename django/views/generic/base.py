@@ -111,23 +111,6 @@ class TemplateResponseMixin(object):
             return [self.template_name]
 
 
-class ViewProxy(object):
-    """
-    A simple proxy for view objects that can be safely passed into the
-    template context.
-    """
-    disallowed_attrs = ['get', 'post', 'put', 'delete', 'head', 'options',
-                        'trace', 'dispatch', 'http_method_not_allowed',
-                        'as_view', 'form_valid', 'form_invalid']
-
-    def __init__(self, view):
-        self._view = view
-
-    def __getattr__(self, attr):
-        if attr not in self.disallowed_attrs:
-            return getattr(self._view, attr)
-
-
 class TemplateView(TemplateResponseMixin, View):
     """
     A view that renders a template.
@@ -135,7 +118,7 @@ class TemplateView(TemplateResponseMixin, View):
     def get_context_data(self, **kwargs):
         return {
             'params': kwargs,
-            'view': ViewProxy(self)
+            'view': self
         }
 
     def get(self, request, *args, **kwargs):
