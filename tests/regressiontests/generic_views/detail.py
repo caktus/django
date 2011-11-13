@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase
+from django.views.generic.base import View
 
 from .models import Artist, Author, Page
 
@@ -9,6 +10,10 @@ from .models import Artist, Author, Page
 class DetailViewTest(TestCase):
     fixtures = ['generic-views-test-data.json']
     urls = 'regressiontests.generic_views.urls'
+
+    def test_view_in_context(self):
+        res = self.client.get('/detail/obj/')
+        self.assertTrue(isinstance(res.context['view'], View))
 
     def test_simple_object(self):
         res = self.client.get('/detail/obj/')

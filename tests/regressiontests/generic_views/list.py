@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase
+from django.views.generic.base import View
 
 from .models import Author, Artist
 
@@ -158,6 +159,11 @@ class ListViewTests(TestCase):
 
     def test_missing_items(self):
         self.assertRaises(ImproperlyConfigured, self.client.get, '/list/authors/invalid/')
+
+    def test_update_view_in_context(self):
+        res = self.client.get('/list/authors/')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(isinstance(res.context['view'], View))
 
     def _make_authors(self, n):
         Author.objects.all().delete()

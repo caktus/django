@@ -92,7 +92,7 @@ class ModelFormMixin(FormMixin, SingleObjectMixin):
 
     def get_form_kwargs(self):
         """
-        Returns the keyword arguments for instanciating the form.
+        Returns the keyword arguments for instantiating the form.
         """
         kwargs = super(ModelFormMixin, self).get_form_kwargs()
         kwargs.update({'instance': self.object})
