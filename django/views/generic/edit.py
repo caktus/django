@@ -46,9 +46,9 @@ class FormMixin(object):
         return kwargs
 
     def get_context_data(self, **kwargs):
-        context = {'view': self}
-        context.update(kwargs)
-        return context
+        if 'view' not in kwargs:
+            kwargs['view'] = self
+        return kwargs
 
     def get_success_url(self):
         if self.success_url:
@@ -115,8 +115,9 @@ class ModelFormMixin(FormMixin, SingleObjectMixin):
         return super(ModelFormMixin, self).form_valid(form)
 
     def get_context_data(self, **kwargs):
-        context = {'view': self}
-        context.update(kwargs)
+        context = kwargs
+        if 'view' not in context:
+            context['view'] = self
         if self.object:
             context['object'] = self.object
             context_object_name = self.get_context_object_name(self.object)

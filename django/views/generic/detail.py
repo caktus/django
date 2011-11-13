@@ -86,8 +86,9 @@ class SingleObjectMixin(object):
             return None
 
     def get_context_data(self, **kwargs):
-        context = {'view': self}
-        context.update(kwargs)
+        context = kwargs
+        if 'view' not in context:
+            context['view'] = self
         context_object_name = self.get_context_object_name(self.object)
         if context_object_name:
             context[context_object_name] = self.object
