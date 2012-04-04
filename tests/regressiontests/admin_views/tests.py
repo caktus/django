@@ -2434,7 +2434,7 @@ class AdminCustomQuerysetTest(TestCase):
                 post_data, follow=True)
         self.assertEqual(response.status_code, 200)
         # Message should contain non-ugly model name. Instance representation is set by unicode() (ugly)
-        self.assertContains(response, '<li class="info">The paper &quot;Paper_Deferred_author object&quot; was changed successfully.</li>', html=True)
+        self.assertContains(response, '<li class="success">The paper &quot;Paper_Deferred_author object&quot; was changed successfully.</li>', html=True)
 
         # defer() is used in ModelAdmin.queryset()
         cl = CoverLetter.objects.create(author=u"John Doe")
@@ -2449,7 +2449,7 @@ class AdminCustomQuerysetTest(TestCase):
                 post_data, follow=True)
         self.assertEqual(response.status_code, 200)
         # Message should contain non-ugly model name. Instance representation is set by model's __unicode__()
-        self.assertContains(response, '<li class="info">The cover letter &quot;John Doe II&quot; was changed successfully.</li>', html=True)
+        self.assertContains(response, '<li class="success">The cover letter &quot;John Doe II&quot; was changed successfully.</li>', html=True)
 
 class AdminInlineFileUploadTest(TestCase):
     urls = "regressiontests.admin_views.urls"

@@ -688,12 +688,12 @@ class ModelAdmin(BaseModelAdmin):
         change_message = ' '.join(change_message)
         return change_message or _('No fields changed.')
 
-    def message_user(self, request, message):
+    def message_user(self, request, message, level=messages.INFO):
         """
         Send a message to the user. The default implementation
         posts a message using the django.contrib.messages backend.
         """
-        messages.info(request, message)
+        messages.add_message(request, level, message)
 
     def save_form(self, request, form, change):
         """
@@ -773,7 +773,7 @@ class ModelAdmin(BaseModelAdmin):
         # Here, we distinguish between different save types by checking for
         # the presence of keys in request.POST.
         if "_continue" in request.POST:
-            self.message_user(request, msg + ' ' + _("You may edit it again below."))
+            self.message_user(request, msg + ' ' + _("You may edit it again below."), messages.SUCCESS)
             if "_popup" in request.POST:
                 post_url_continue += "?_popup=1"
             return HttpResponseRedirect(post_url_continue % pk_value)
@@ -785,10 +785,10 @@ class ModelAdmin(BaseModelAdmin):
                 # escape() calls force_unicode.
                 (escape(pk_value), escapejs(obj)))
         elif "_addanother" in request.POST:
-            self.message_user(request, msg + ' ' + (_("You may add another %s below.") % force_unicode(opts.verbose_name)))
+            self.message_user(request, msg + ' ' + (_("You may add another %s below.") % force_unicode(opts.verbose_name)), messages.SUCCESS)
             return HttpResponseRedirect(request.path)
         else:
-            self.message_user(request, msg)
+            self.message_user(request, msg, messages.SUCCESS)
 
             # Figure out where to redirect. If the user has change permission,
             # redirect to the change-list page for this object. Otherwise,
@@ -821,25 +821,25 @@ class ModelAdmin(BaseModelAdmin):
 
         msg = _('The %(name)s "%(obj)s" was changed successfully.') % {'name': force_unicode(verbose_name), 'obj': force_unicode(obj)}
         if "_continue" in request.POST:
-            self.message_user(request, msg + ' ' + _("You may edit it again below."))
+            self.message_user(request, msg + ' ' + _("You may edit it again below."), messages.SUCCESS)
             if "_popup" in request.REQUEST:
                 return HttpResponseRedirect(request.path + "?_popup=1")
             else:
                 return HttpResponseRedirect(request.path)
         elif "_saveasnew" in request.POST:
             msg = _('The %(name)s "%(obj)s" was added successfully. You may edit it again below.') % {'name': force_unicode(verbose_name), 'obj': obj}
-            self.message_user(request, msg)
+            self.message_user(request, msg, messages.SUCCESS)
             return HttpResponseRedirect(reverse('admin:%s_%s_change' %
                                         (opts.app_label, module_name),
                                         args=(pk_value,),
                                         current_app=self.admin_site.name))
         elif "_addanother" in request.POST:
-            self.message_user(request, msg + ' ' + (_("You may add another %s below.") % force_unicode(verbose_name)))
+            self.message_user(request, msg + ' ' + (_("You may add another %s below.") % force_unicode(verbose_name)), messages.SUCCESS)
             return HttpResponseRedirect(reverse('admin:%s_%s_add' %
                                         (opts.app_label, module_name),
                                         current_app=self.admin_site.name))
         else:
-            self.message_user(request, msg)
+            self.message_user(request, msg, messages.SUCCESS)
             # Figure out where to redirect. If the user has change permission,
             # redirect to the change-list page for this object. Otherwise,
             # redirect to the admin index.
@@ -898,7 +898,7 @@ class ModelAdmin(BaseModelAdmin):
                 # Reminder that something needs to be selected or nothing will happen
                 msg = _("Items must be selected in order to perform "
                         "actions on them. No items have been changed.")
-                self.message_user(request, msg)
+                self.message_user(request, msg, messages.ERROR)
                 return None
 
             if not select_across:
@@ -916,7 +916,7 @@ class ModelAdmin(BaseModelAdmin):
                 return HttpResponseRedirect(request.get_full_path())
         else:
             msg = _("No action selected.")
-            self.message_user(request, msg)
+            self.message_user(request, msg, messages.ERROR)
             return None
 
     @csrf_protect_m
@@ -1158,7 +1158,7 @@ class ModelAdmin(BaseModelAdmin):
             else:
                 msg = _("Items must be selected in order to perform "
                         "actions on them. No items have been changed.")
-                self.message_user(request, msg)
+                self.message_user(request, msg, messages.ERROR)
                 action_failed = True
 
         # Actions with confirmation
@@ -1203,7 +1203,7 @@ class ModelAdmin(BaseModelAdmin):
                                     changecount) % {'count': changecount,
                                                     'name': name,
                                                     'obj': force_unicode(obj)}
-                    self.message_user(request, msg)
+                    self.message_user(request, msg, messages.SUCCESS)
 
                 return HttpResponseRedirect(request.get_full_path())
 
@@ -1280,7 +1280,10 @@ class ModelAdmin(BaseModelAdmin):
             self.log_deletion(request, obj, obj_display)
             self.delete_model(request, obj)
 
-            self.message_user(request, _('The %(name)s "%(obj)s" was deleted successfully.') % {'name': force_unicode(opts.verbose_name), 'obj': force_unicode(obj_display)})
+            self.message_user(request, _('The %(name)s "%(obj)s" was deleted successfully.') % {
+                'name': force_unicode(opts.verbose_name),
+                'obj': force_unicode(obj_display)
+            }, messages.SUCCESS)
 
             if not self.has_change_permission(request, None):
                 return HttpResponseRedirect(reverse('admin:index',

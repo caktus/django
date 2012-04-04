@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.comments.models import Comment
 from django.utils.translation import ugettext_lazy as _, ungettext
 from django.contrib.comments import get_model
@@ -65,7 +65,7 @@ class CommentsAdmin(admin.ModelAdmin):
         msg = ungettext(u'1 comment was successfully %(action)s.',
                         u'%(count)s comments were successfully %(action)s.',
                         n_comments)
-        self.message_user(request, msg % {'count': n_comments, 'action': done_message(n_comments)})
+        self.message_user(request, msg % {'count': n_comments, 'action': done_message(n_comments)}, messages.SUCCESS)
 
 # Only register the default admin if the model is the built-in comment model
 # (this won't be true if there's a custom comment app).
