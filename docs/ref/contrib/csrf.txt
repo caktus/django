@@ -91,7 +91,7 @@ that allow headers to be set on every request. In jQuery, you can use the
 
 .. code-block:: javascript
 
-    $(document).ajaxSend(function(event, xhr, settings) {
+    jQuery(document).ajaxSend(function(event, xhr, settings) {
         function getCookie(name) {
             var cookieValue = null;
             if (document.cookie && document.cookie != '') {
@@ -145,6 +145,25 @@ later to replace ``sameOrigin``.
 In addition, if the CSRF cookie has not been sent to the client by use of
 :ttag:`csrf_token`, you may need to ensure the client receives the cookie by
 using :func:`~django.views.decorators.csrf.ensure_csrf_cookie`.
+
+Other template engines
+----------------------
+
+When using a different template engine than Django's built-in engine, you can
+set the token in your forms manually after making sure it's available in the
+template context.
+
+For example, in the Cheetah template language, your form could contain the
+following:
+
+.. code-block:: html
+
+    <div style="display:none">
+        <input type="hidden" name="csrfmiddlewaretoken" value="$csrf_token"/>
+    </div>
+
+You can use JavaScript similar to the :ref:`AJAX code <csrf-ajax>` above to get
+the value of the CSRF token.
 
 The decorator method
 --------------------
@@ -330,6 +349,8 @@ Utilities
 
 .. function:: ensure_csrf_cookie(view)
 
+    .. versionadded:: 1.4
+
     This decorator forces a view to send the CSRF cookie.
 
 Scenarios
@@ -347,8 +368,9 @@ all the views that need it, enable the middleware and use
 CsrfViewMiddleware.process_view not used
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-There are cases when may not have run before your view is run - 404 and 500
-handlers, for example - but you still need the CSRF token in a form.
+There are cases when ``CsrfViewMiddleware.process_view`` may not have run
+before your view is run - 404 and 500 handlers, for example - but you still
+need the CSRF token in a form.
 
 Solution: use :func:`~django.views.decorators.csrf.requires_csrf_token`
 
@@ -420,7 +442,7 @@ The domain to be used when setting the CSRF cookie.  This can be useful for
 easily allowing cross-subdomain requests to be excluded from the normal cross
 site request forgery protection.  It should be set to a string such as
 ``".lawrence.com"`` to allow a POST request from a form on one subdomain to be
-accepted by accepted by a view served from another subdomain.
+accepted by a view served from another subdomain.
 
 Please note that, with or without use of this setting, this CSRF protection
 mechanism is not safe against cross-subdomain attacks -- see `Limitations`_.

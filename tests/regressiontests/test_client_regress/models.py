@@ -3,7 +3,6 @@
 Regression tests for the Test Client, especially the customized assertions.
 """
 import os
-import warnings
 
 from django.conf import settings
 from django.core.exceptions import SuspiciousOperation
@@ -13,7 +12,7 @@ from django.template import (TemplateDoesNotExist, TemplateSyntaxError,
 import django.template.context
 from django.test import Client, TestCase
 from django.test.client import encode_file, RequestFactory
-from django.test.utils import ContextList, override_settings
+from django.test.utils import ContextList
 from django.template.response import SimpleTemplateResponse
 from django.http import HttpResponse
 
@@ -368,6 +367,18 @@ class AssertRedirectsTests(TestCase):
             '/test_client_regress/no_template_view/', 301, 200)
         self.assertEqual(len(response.redirect_chain), 3)
 
+    def test_redirect_to_different_host(self):
+        "The test client will preserve scheme, host and port changes"
+        response = self.client.get('/test_client_regress/redirect_other_host/', follow=True)
+        self.assertRedirects(response,
+            'https://otherserver:8443/test_client_regress/no_template_view/',
+            status_code=301, target_status_code=200)
+        # We can't use is_secure() or get_host()
+        # because response.request is a dictionary, not an HttpRequest
+        self.assertEqual(response.request.get('wsgi.url_scheme'), 'https')
+        self.assertEqual(response.request.get('SERVER_NAME'), 'otherserver')
+        self.assertEqual(response.request.get('SERVER_PORT'), '8443')
+
     def test_redirect_chain_on_non_redirect_page(self):
         "An assertion is raised if the original page couldn't be retrieved as expected"
         # This page will redirect with code 301, not 302
@@ -550,18 +561,6 @@ class SessionEngineTests(TestCase):
         response = self.client.get("/test_client/login_protected_view/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['user'].username, 'testclient')
-
-
-class NoSessionsAppInstalled(SessionEngineTests):
-    """#7836 - Test client can exercise sessions even when 'django.contrib.sessions' isn't installed."""
-
-    # Remove the 'session' contrib app from INSTALLED_APPS
-    @override_settings(INSTALLED_APPS=tuple(filter(lambda a: a!='django.contrib.sessions', settings.INSTALLED_APPS)))
-    def test_session(self):
-        # This request sets a session variable.
-        response = self.client.get('/test_client_regress/set_session/')
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.client.session['session_var'], 'YES')
 
 
 class URLEscapingTests(TestCase):
@@ -939,39 +938,19 @@ class RequestHeadersTest(TestCase):
         self.assertRedirects(response, '/test_client_regress/check_headers/',
             status_code=301, target_status_code=200)
 
-class ResponseTemplateDeprecationTests(TestCase):
-    """
-    Response.template still works backwards-compatibly, but with pending deprecation warning. Refs #12226.
-
-    """
-    def setUp(self):
-        self.save_warnings_state()
-        warnings.filterwarnings('ignore', category=DeprecationWarning)
-
-    def tearDown(self):
-        self.restore_warnings_state()
-
-    def test_response_template_data(self):
-        response = self.client.get("/test_client_regress/request_data/", data={'foo':'whiz'})
-        self.assertEqual(response.template.__class__, Template)
-        self.assertEqual(response.template.name, 'base.html')
-
-    def test_response_no_template(self):
-        response = self.client.get("/test_client_regress/request_methods/")
-        self.assertEqual(response.template, None)
-
 
 class ReadLimitedStreamTest(TestCase):
     """
-    Tests that ensure that HttpRequest.raw_post_data, HttpRequest.read() and
-    HttpRequest.read(BUFFER) have proper LimitedStream behaviour.
+    Tests that ensure that HttpRequest.body, HttpRequest.read() and
+    HttpRequest.read(BUFFER) have proper LimitedStream behavior.
 
     Refs #14753, #15785
     """
-    def test_raw_post_data_from_empty_request(self):
-        """HttpRequest.raw_post_data on a test client GET request should return
+
+    def test_body_from_empty_request(self):
+        """HttpRequest.body on a test client GET request should return
         the empty string."""
-        self.assertEquals(self.client.get("/test_client_regress/raw_post_data/").content, '')
+        self.assertEquals(self.client.get("/test_client_regress/body/").content, '')
 
     def test_read_from_empty_request(self):
         """HttpRequest.read() on a test client GET request should return the
@@ -1004,7 +983,7 @@ class RequestFactoryStateTest(TestCase):
     """Regression tests for #15929."""
     # These tests are checking that certain middleware don't change certain
     # global state. Alternatively, from the point of view of a test, they are
-    # ensuring test isolation behaviour. So, unusually, it doesn't make sense to
+    # ensuring test isolation behavior. So, unusually, it doesn't make sense to
     # run the tests individually, and if any are failing it is confusing to run
     # them with any other set of tests.
 

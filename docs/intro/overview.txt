@@ -230,7 +230,7 @@ templates. In your Django settings, you specify a list of directories to check
 for templates. If a template doesn't exist in the first directory, it checks the
 second, and so on.
 
-Let's say the ``news/article_detail.html`` template was found. Here's what that
+Let's say the ``news/year_archive.html`` template was found. Here's what that
 might look like:
 
 .. code-block:: html+django
@@ -320,5 +320,5 @@ The next obvious steps are for you to `download Django`_, read :doc:`the
 tutorial </intro/tutorial01>` and join `the community`_. Thanks for your
 interest!
 
-.. _download Django: http://www.djangoproject.com/download/
-.. _the community: http://www.djangoproject.com/community/
+.. _download Django: https://www.djangoproject.com/download/
+.. _the community: https://www.djangoproject.com/community/

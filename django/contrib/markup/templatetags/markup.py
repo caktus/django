@@ -11,6 +11,8 @@ markup syntaxes to HTML; currently there is support for:
     * reStructuredText, which requires docutils from http://docutils.sf.net/
 """
 
+import warnings
+
 from django import template
 from django.conf import settings
 from django.utils.encoding import smart_str, force_unicode
@@ -24,7 +26,7 @@ def textile(value):
         import textile
     except ImportError:
         if settings.DEBUG:
-            raise template.TemplateSyntaxError("Error in {% textile %} filter: The Python textile library isn't installed.")
+            raise template.TemplateSyntaxError("Error in 'textile' filter: The Python textile library isn't installed.")
         return force_unicode(value)
     else:
         return mark_safe(force_unicode(textile.textile(smart_str(value), encoding='utf-8', output='utf-8')))
@@ -51,7 +53,7 @@ def markdown(value, arg=''):
         import markdown
     except ImportError:
         if settings.DEBUG:
-            raise template.TemplateSyntaxError("Error in {% markdown %} filter: The Python markdown library isn't installed.")
+            raise template.TemplateSyntaxError("Error in 'markdown' filter: The Python markdown library isn't installed.")
         return force_unicode(value)
     else:
         # markdown.version was first added in 1.6b. The only version of markdown
@@ -63,14 +65,25 @@ def markdown(value, arg=''):
                 safe_mode = True
             else:
                 safe_mode = False
-
+            python_markdown_deprecation = "The use of Python-Markdown "
+            "< 2.1 in Django is deprecated; please update to the current version"
             # Unicode support only in markdown v1.7 or above. Version_info
             # exist only in markdown v1.6.2rc-2 or above.
-            if getattr(markdown, "version_info", None) < (1,7):
+            markdown_vers = getattr(markdown, "version_info", None)
+            if markdown_vers < (1,7):
+                warnings.warn(python_markdown_deprecation, DeprecationWarning)
                 return mark_safe(force_unicode(markdown.markdown(smart_str(value), extensions, safe_mode=safe_mode)))
             else:
-                return mark_safe(markdown.markdown(force_unicode(value), extensions, safe_mode=safe_mode))
+                if markdown_vers >= (2,1):
+                    if safe_mode:
+                        return mark_safe(markdown.markdown(force_unicode(value), extensions, safe_mode=safe_mode, enable_attributes=False))
+                    else:
+                        return mark_safe(markdown.markdown(force_unicode(value), extensions, safe_mode=safe_mode))
+                else:
+                    warnings.warn(python_markdown_deprecation, DeprecationWarning)
+                    return mark_safe(markdown.markdown(force_unicode(value), extensions, safe_mode=safe_mode))
         else:
+            warnings.warn(python_markdown_deprecation, DeprecationWarning)
             return mark_safe(force_unicode(markdown.markdown(smart_str(value))))
 
 @register.filter(is_safe=True)
@@ -79,7 +92,7 @@ def restructuredtext(value):
         from docutils.core import publish_parts
     except ImportError:
         if settings.DEBUG:
-            raise template.TemplateSyntaxError("Error in {% restructuredtext %} filter: The Python docutils library isn't installed.")
+            raise template.TemplateSyntaxError("Error in 'restructuredtext' filter: The Python docutils library isn't installed.")
         return force_unicode(value)
     else:
         docutils_settings = getattr(settings, "RESTRUCTUREDTEXT_FILTER_SETTINGS", {})

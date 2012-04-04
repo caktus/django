@@ -1,11 +1,19 @@
 import os
 
-from django.conf import settings
+from django.conf import global_settings
 from django.contrib.auth import authenticate
 from django.db.models import Q
+from django.template import context
 from django.test import TestCase
+from django.test.utils import override_settings
 
 
+@override_settings(
+    TEMPLATE_DIRS=(
+            os.path.join(os.path.dirname(__file__), 'templates'),
+        ),
+    USE_TZ=False,                           # required for loading the fixture
+)
 class AuthContextProcessorTests(TestCase):
     """
     Tests for the ``django.contrib.auth.context_processors.auth`` processor
@@ -13,30 +21,37 @@ class AuthContextProcessorTests(TestCase):
     urls = 'django.contrib.auth.tests.urls'
     fixtures = ['context-processors-users.xml']
 
-    def setUp(self):
-        self.old_TEMPLATE_DIRS = settings.TEMPLATE_DIRS
-        settings.TEMPLATE_DIRS = (
-            os.path.join(os.path.dirname(__file__), 'templates'),
-        )
-
-    def tearDown(self):
-        settings.TEMPLATE_DIRS = self.old_TEMPLATE_DIRS
-
+    @override_settings(
+        MIDDLEWARE_CLASSES=global_settings.MIDDLEWARE_CLASSES,
+        TEMPLATE_CONTEXT_PROCESSORS=global_settings.TEMPLATE_CONTEXT_PROCESSORS,
+    )
     def test_session_not_accessed(self):
         """
         Tests that the session is not accessed simply by including
         the auth context processor
         """
+        context._standard_context_processors = None
+
         response = self.client.get('/auth_processor_no_attr_access/')
         self.assertContains(response, "Session not accessed")
 
+        context._standard_context_processors = None
+
+    @override_settings(
+        MIDDLEWARE_CLASSES=global_settings.MIDDLEWARE_CLASSES,
+        TEMPLATE_CONTEXT_PROCESSORS=global_settings.TEMPLATE_CONTEXT_PROCESSORS,
+    )
     def test_session_is_accessed(self):
         """
         Tests that the session is accessed if the auth context processor
         is used and relevant attributes accessed.
         """
+        context._standard_context_processors = None
+
         response = self.client.get('/auth_processor_attr_access/')
         self.assertContains(response, "Session accessed")
+
+        context._standard_context_processors = None
 
     def test_perms_attrs(self):
         self.client.login(username='super', password='secret')

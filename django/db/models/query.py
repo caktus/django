@@ -4,6 +4,7 @@ The main QuerySet implementation. This provides the public API for the ORM.
 
 import copy
 import itertools
+import sys
 
 from django.db import connections, router, transaction, IntegrityError
 from django.db.models.fields import AutoField
@@ -232,7 +233,9 @@ class QuerySet(object):
         An iterator over the results from applying this QuerySet to the
         database.
         """
-        fill_cache = self.query.select_related
+        fill_cache = False
+        if connections[self.db].features.supports_select_related:
+            fill_cache = self.query.select_related
         if isinstance(fill_cache, dict):
             requested = fill_cache
         else:
@@ -321,6 +324,8 @@ class QuerySet(object):
         If args is present the expression is passed as a kwarg using
         the Aggregate object's default alias.
         """
+        if self.query.distinct_fields:
+            raise NotImplementedError("aggregate() + distinct(fields) not implemented.")
         for arg in args:
             kwargs[arg.default_alias] = arg
 
@@ -394,18 +399,29 @@ class QuerySet(object):
         self._for_write = True
         connection = connections[self.db]
         fields = self.model._meta.local_fields
-        if (connection.features.can_combine_inserts_with_and_without_auto_increment_pk
-            and self.model._meta.has_auto_field):
-            self.model._base_manager._insert(objs, fields=fields, using=self.db)
+        if not transaction.is_managed(using=self.db):
+            transaction.enter_transaction_management(using=self.db)
+            forced_managed = True
         else:
-            objs_with_pk, objs_without_pk = partition(
-                lambda o: o.pk is None,
-                objs
-            )
-            if objs_with_pk:
-                self.model._base_manager._insert(objs_with_pk, fields=fields, using=self.db)
-            if objs_without_pk:
-                self.model._base_manager._insert(objs_without_pk, fields=[f for f in fields if not isinstance(f, AutoField)], using=self.db)
+            forced_managed = False
+        try:
+            if (connection.features.can_combine_inserts_with_and_without_auto_increment_pk
+                and self.model._meta.has_auto_field):
+                self.model._base_manager._insert(objs, fields=fields, using=self.db)
+            else:
+                objs_with_pk, objs_without_pk = partition(lambda o: o.pk is None, objs)
+                if objs_with_pk:
+                    self.model._base_manager._insert(objs_with_pk, fields=fields, using=self.db)
+                if objs_without_pk:
+                    self.model._base_manager._insert(objs_without_pk, fields=[f for f in fields if not isinstance(f, AutoField)], using=self.db)
+            if forced_managed:
+                transaction.commit(using=self.db)
+            else:
+                transaction.commit_unless_managed(using=self.db)
+        finally:
+            if forced_managed:
+                transaction.leave_transaction_management(using=self.db)
+
         return objs
 
     def get_or_create(self, **kwargs):
@@ -435,10 +451,12 @@ class QuerySet(object):
                 return obj, True
             except IntegrityError, e:
                 transaction.savepoint_rollback(sid, using=self.db)
+                exc_info = sys.exc_info()
                 try:
                     return self.get(**lookup), False
                 except self.model.DoesNotExist:
-                    raise e
+                    # Re-raise the IntegrityError with its original traceback.
+                    raise exc_info[1], None, exc_info[2]
 
     def latest(self, field_name=None):
         """
@@ -467,7 +485,7 @@ class QuerySet(object):
         qs = self._clone()
         qs.query.add_filter(('pk__in', id_list))
         qs.query.clear_ordering(force_empty=True)
-        return dict([(obj._get_pk_val(), obj) for obj in qs.iterator()])
+        return dict([(obj._get_pk_val(), obj) for obj in qs])
 
     def delete(self):
         """
@@ -738,12 +756,14 @@ class QuerySet(object):
         obj.query.add_ordering(*field_names)
         return obj
 
-    def distinct(self, true_or_false=True):
+    def distinct(self, *field_names):
         """
         Returns a new QuerySet instance that will select only distinct results.
         """
+        assert self.query.can_filter(), \
+                "Cannot create distinct fields once a slice has been taken."
         obj = self._clone()
-        obj.query.distinct = true_or_false
+        obj.query.add_distinct_fields(*field_names)
         return obj
 
     def extra(self, select=None, where=None, params=None, tables=None,
@@ -1166,7 +1186,7 @@ class EmptyQuerySet(QuerySet):
         """
         return self
 
-    def distinct(self, true_or_false=True):
+    def distinct(self, fields=None):
         """
         Always returns EmptyQuerySet.
         """
@@ -1246,7 +1266,7 @@ def get_klass_info(klass, max_depth=0, cur_depth=0, requested=None,
         return None
 
     if only_load:
-        load_fields = only_load.get(klass)
+        load_fields = only_load.get(klass) or set()
         # When we create the object, we will also be creating populating
         # all the parent classes, so traverse the parent classes looking
         # for fields that must be included on load.
@@ -1576,12 +1596,11 @@ def prefetch_related_objects(result_cache, related_lookups):
     done_lookups = set() # list of lookups like foo__bar__baz
     done_queries = {}    # dictionary of things like 'foo__bar': [results]
 
-    manual_lookups = list(related_lookups)
     auto_lookups = [] # we add to this as we go through.
     followed_descriptors = set() # recursion protection
 
-    related_lookups = itertools.chain(manual_lookups, auto_lookups)
-    for lookup in related_lookups:
+    all_lookups = itertools.chain(related_lookups, auto_lookups)
+    for lookup in all_lookups:
         if lookup in done_lookups:
             # We've done exactly this already, skip the whole thing
             continue

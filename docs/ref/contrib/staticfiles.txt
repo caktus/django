@@ -281,8 +281,8 @@ StaticFilesStorage
     .. versionadded:: 1.4
 
     This method is called by the :djadmin:`collectstatic` management command
-    after each run and gets passed the paths of found files, as well as the
-    command line options.
+    after each run and gets passed the local storages and paths of found
+    files as a dictionary, as well as the command line options.
 
     The :class:`~django.contrib.staticfiles.storage.CachedStaticFilesStorage`
     uses this behind the scenes to replace the paths with their hashed
@@ -327,7 +327,7 @@ CachedStaticFilesStorage
 
     .. code-block:: css+django
 
-        @import url("/static/admin/css/base.27e20196a850.css");
+        @import url("../admin/css/base.27e20196a850.css");
 
     To enable the ``CachedStaticFilesStorage`` you have to make sure the
     following requirements are met:
@@ -365,7 +365,7 @@ static
 
 .. versionadded:: 1.4
 
-Uses the configued :setting:`STATICFILES_STORAGE` storage to create the
+Uses the configured :setting:`STATICFILES_STORAGE` storage to create the
 full URL for the given relative path, e.g.:
 
 .. code-block:: html+django

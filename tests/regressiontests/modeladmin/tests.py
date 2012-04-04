@@ -5,7 +5,7 @@ from datetime import date
 from django import forms
 from django.conf import settings
 from django.contrib.admin.options import (ModelAdmin, TabularInline,
-    HORIZONTAL, VERTICAL)
+     InlineModelAdmin, HORIZONTAL, VERTICAL)
 from django.contrib.admin.sites import AdminSite
 from django.contrib.admin.validation import validate
 from django.contrib.admin.widgets import AdminDateWidget, AdminRadioSelect
@@ -15,6 +15,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.forms.models import BaseModelFormSet
 from django.forms.widgets import Select
 from django.test import TestCase
+from django.test.utils import override_settings
 from django.utils import unittest
 
 from .models import Band, Concert, ValidationTestModel, ValidationTestInlineModel
@@ -310,7 +311,7 @@ class ModelAdminTests(TestCase):
         ma = ConcertAdmin(Concert, self.site)
         form = ma.get_form(request)()
 
-        self.assertEqual(str(form["main_band"]),
+        self.assertHTMLEqual(str(form["main_band"]),
             '<select name="main_band" id="id_main_band">\n'
             '<option value="" selected="selected">---------</option>\n'
             '<option value="%d">The Beatles</option>\n'
@@ -331,7 +332,7 @@ class ModelAdminTests(TestCase):
         ma = ConcertAdmin(Concert, self.site)
         form = ma.get_form(request)()
 
-        self.assertEqual(str(form["main_band"]),
+        self.assertHTMLEqual(str(form["main_band"]),
             '<select name="main_band" id="id_main_band">\n'
             '<option value="" selected="selected">---------</option>\n'
             '<option value="%d">The Doors</option>\n'

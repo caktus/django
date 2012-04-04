@@ -4,6 +4,7 @@ import time
 
 from django.utils.dateformat import format
 from django.utils import dateformat, translation, unittest
+from django.utils.timezone import utc
 from django.utils.tzinfo import FixedOffset, LocalTimezone
 
 
@@ -56,7 +57,6 @@ class DateFormatTests(unittest.TestCase):
         self.assertEqual(datetime.fromtimestamp(int(format(dt, 'U')), ltz).utctimetuple(), dt.utctimetuple())
 
     def test_epoch(self):
-        utc = FixedOffset(0)
         udt = datetime(1970, 1, 1, tzinfo=utc)
         self.assertEqual(format(udt, 'U'), u'0')
 
@@ -104,7 +104,7 @@ class DateFormatTests(unittest.TestCase):
 
         self.assertEqual(dateformat.format(my_birthday, r'Y z \C\E\T'), u'1979 189 CET')
 
-        self.assertEqual(dateformat.format(my_birthday, r'jS o\f F'), u'8th of July')
+        self.assertEqual(dateformat.format(my_birthday, r'jS \o\f F'), u'8th of July')
 
     def test_futuredates(self):
         the_future = datetime(2100, 10, 25, 0, 00)

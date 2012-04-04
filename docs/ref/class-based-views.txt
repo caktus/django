@@ -431,8 +431,13 @@ FormMixin
 
     .. method:: get_initial()
 
-        Retrieve initial data for the form. By default, returns
+        Retrieve initial data for the form. By default, returns a copy of
         :attr:`.initial`.
+
+    .. admonition:: Changed in 1.4
+
+        In Django 1.3, this method was returning the :attr:`initial` class
+        variable itself.
 
     .. method:: get_form_class()
 
@@ -794,11 +799,11 @@ BaseDateListView
 
     .. method:: get_dated_items():
 
-        Returns a 3-tuple containing (``date_list``, ``latest``,
+        Returns a 3-tuple containing (``date_list``, ``object_list``,
         ``extra_context``).
 
         ``date_list`` is the list of dates for which data is available.
-        ``object_list`` is the list of objects ``extra_context`` is a
+        ``object_list`` is the list of objects. ``extra_context`` is a
         dictionary of context data that will be added to any context data
         provided by the
         :class:`~django.views.generic.list.MultipleObjectMixin`.

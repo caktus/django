@@ -3,7 +3,6 @@ import sys
 import os
 import re
 import mimetypes
-import warnings
 from copy import copy
 from urlparse import urlparse, urlsplit
 try:
@@ -350,7 +349,7 @@ class Client(RequestFactory):
         """
         Obtains the current session variables.
         """
-        if 'django.contrib.sessions.middleware.SessionMiddleware' in settings.MIDDLEWARE_CLASSES:
+        if 'django.contrib.sessions' in settings.INSTALLED_APPS:
             engine = import_module(settings.SESSION_ENGINE)
             cookie = self.cookies.get(settings.SESSION_COOKIE_NAME, None)
             if cookie:
@@ -411,17 +410,6 @@ class Client(RequestFactory):
             # backwards-compatibility implications.
             if response.context and len(response.context) == 1:
                 response.context = response.context[0]
-
-            # Provide a backwards-compatible (but pending deprecation) response.template
-            def _get_template(self):
-                warnings.warn("response.template is deprecated; use response.templates instead (which is always a list)",
-                              DeprecationWarning, stacklevel=2)
-                if not self.templates:
-                    return None
-                elif len(self.templates) == 1:
-                    return self.templates[0]
-                return self.templates
-            response.__class__.template = property(_get_template)
 
             # Update persistent cookie data.
             if response.cookies:
@@ -498,7 +486,7 @@ class Client(RequestFactory):
         """
         user = authenticate(**credentials)
         if user and user.is_active \
-                and 'django.contrib.sessions.middleware.SessionMiddleware' in settings.MIDDLEWARE_CLASSES:
+                and 'django.contrib.sessions' in settings.INSTALLED_APPS:
             engine = import_module(settings.SESSION_ENGINE)
 
             # Create a fake request to store login details.
@@ -546,19 +534,18 @@ class Client(RequestFactory):
         response.redirect_chain = []
         while response.status_code in (301, 302, 303, 307):
             url = response['Location']
-            scheme, netloc, path, query, fragment = urlsplit(url)
-
             redirect_chain = response.redirect_chain
             redirect_chain.append((url, response.status_code))
 
-            if scheme:
-                extra['wsgi.url_scheme'] = scheme
+            url = urlsplit(url)
+            if url.scheme:
+                extra['wsgi.url_scheme'] = url.scheme
+            if url.hostname:
+                extra['SERVER_NAME'] = url.hostname
+            if url.port:
+                extra['SERVER_PORT'] = str(url.port)
 
-            # The test client doesn't handle external links,
-            # but since the situation is simulated in test_client,
-            # we fake things here by ignoring the netloc portion of the
-            # redirected URL.
-            response = self.get(path, QueryDict(query), follow=False, **extra)
+            response = self.get(url.path, QueryDict(url.query), follow=False, **extra)
             response.redirect_chain = redirect_chain
 
             # Prevent loops

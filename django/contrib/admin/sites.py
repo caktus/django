@@ -1,5 +1,5 @@
 from functools import update_wrapper
-from django import http
+from django.http import Http404, HttpResponseRedirect
 from django.contrib.admin import ModelAdmin, actions
 from django.contrib.admin.forms import AdminAuthenticationForm
 from django.contrib.auth import REDIRECT_FIELD_NAME
@@ -7,7 +7,7 @@ from django.contrib.contenttypes import views as contenttype_views
 from django.views.decorators.csrf import csrf_protect
 from django.db.models.base import ModelBase
 from django.core.exceptions import ImproperlyConfigured
-from django.core.urlresolvers import reverse
+from django.core.urlresolvers import reverse, NoReverseMatch
 from django.template.response import TemplateResponse
 from django.utils.safestring import mark_safe
 from django.utils.text import capfirst
@@ -188,6 +188,10 @@ class AdminSite(object):
         """
         def inner(request, *args, **kwargs):
             if not self.has_permission(request):
+                if request.path == reverse('admin:logout',
+                                           current_app=self.name):
+                    index_path = reverse('admin:index', current_app=self.name)
+                    return HttpResponseRedirect(index_path)
                 return self.login(request)
             return view(request, *args, **kwargs)
         if not cacheable:
@@ -342,10 +346,18 @@ class AdminSite(object):
                     info = (app_label, model._meta.module_name)
                     model_dict = {
                         'name': capfirst(model._meta.verbose_name_plural),
-                        'admin_url': reverse('admin:%s_%s_changelist' % info, current_app=self.name),
-                        'add_url': reverse('admin:%s_%s_add' % info, current_app=self.name),
                         'perms': perms,
                     }
+                    if perms.get('change', False):
+                        try:
+                            model_dict['admin_url'] = reverse('admin:%s_%s_changelist' % info, current_app=self.name)
+                        except NoReverseMatch:
+                            pass
+                    if perms.get('add', False):
+                        try:
+                            model_dict['add_url'] = reverse('admin:%s_%s_add' % info, current_app=self.name)
+                        except NoReverseMatch:
+                            pass
                     if app_label in app_dict:
                         app_dict[app_label]['models'].append(model_dict)
                     else:
@@ -388,10 +400,18 @@ class AdminSite(object):
                         info = (app_label, model._meta.module_name)
                         model_dict = {
                             'name': capfirst(model._meta.verbose_name_plural),
-                            'admin_url': reverse('admin:%s_%s_changelist' % info, current_app=self.name),
-                            'add_url': reverse('admin:%s_%s_add' % info, current_app=self.name),
                             'perms': perms,
                         }
+                        if perms.get('change', False):
+                            try:
+                                model_dict['admin_url'] = reverse('admin:%s_%s_changelist' % info, current_app=self.name)
+                            except NoReverseMatch:
+                                pass
+                        if perms.get('add', False):
+                            try:
+                                model_dict['add_url'] = reverse('admin:%s_%s_add' % info, current_app=self.name)
+                            except NoReverseMatch:
+                                pass
                         if app_dict:
                             app_dict['models'].append(model_dict),
                         else:
@@ -405,7 +425,7 @@ class AdminSite(object):
                                 'models': [model_dict],
                             }
         if not app_dict:
-            raise http.Http404('The requested admin page does not exist.')
+            raise Http404('The requested admin page does not exist.')
         # Sort the models alphabetically within each app.
         app_dict['models'].sort(key=lambda x: x['name'])
         context = {

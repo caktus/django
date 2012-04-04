@@ -100,7 +100,7 @@ class Query(object):
 
     def __init__(self, model, where=WhereNode):
         self.model = model
-        self.alias_refcount = {}
+        self.alias_refcount = SortedDict()
         self.alias_map = {}     # Maps alias to join information
         self.table_map = {}     # Maps table names to list of aliases.
         self.join_map = {}
@@ -127,6 +127,7 @@ class Query(object):
         self.order_by = []
         self.low_mark, self.high_mark = 0, None  # Used for offset/limit
         self.distinct = False
+        self.distinct_fields = []
         self.select_for_update = False
         self.select_for_update_nowait = False
         self.select_related = False
@@ -265,6 +266,7 @@ class Query(object):
         obj.order_by = self.order_by[:]
         obj.low_mark, obj.high_mark = self.low_mark, self.high_mark
         obj.distinct = self.distinct
+        obj.distinct_fields = self.distinct_fields[:]
         obj.select_for_update = self.select_for_update
         obj.select_for_update_nowait = self.select_for_update_nowait
         obj.select_related = self.select_related
@@ -298,6 +300,7 @@ class Query(object):
         else:
             obj.used_aliases = set()
         obj.filter_is_sticky = False
+
         obj.__dict__.update(kwargs)
         if hasattr(obj, '_setup_query'):
             obj._setup_query()
@@ -393,7 +396,7 @@ class Query(object):
         Performs a COUNT() query using the current filter constraints.
         """
         obj = self.clone()
-        if len(self.select) > 1 or self.aggregate_select:
+        if len(self.select) > 1 or self.aggregate_select or (self.distinct and self.distinct_fields):
             # If a select clause exists, then the query has already started to
             # specify the columns that are to be returned.
             # In this case, we need to use a subquery to evaluate the count.
@@ -452,6 +455,8 @@ class Query(object):
                 "Cannot combine queries once a slice has been taken."
         assert self.distinct == rhs.distinct, \
             "Cannot combine a unique query with a non-unique query."
+        assert self.distinct_fields == rhs.distinct_fields, \
+            "Cannot combine queries with different distinct fields."
 
         self.remove_inherited_models()
         # Work out how to relabel the rhs aliases, if necessary.
@@ -570,10 +575,7 @@ class Query(object):
             return
         orig_opts = self.model._meta
         seen = {}
-        if orig_opts.proxy:
-            must_include = {orig_opts.proxy_for_model: set([orig_opts.pk])}
-        else:
-            must_include = {self.model: set([orig_opts.pk])}
+        must_include = {orig_opts.concrete_model: set([orig_opts.pk])}
         for field_name in field_names:
             parts = field_name.split(LOOKUP_SEP)
             cur_model = self.model
@@ -581,7 +583,7 @@ class Query(object):
             for name in parts[:-1]:
                 old_model = cur_model
                 source = opts.get_field_by_name(name)[0]
-                cur_model = opts.get_field_by_name(name)[0].rel.to
+                cur_model = source.rel.to
                 opts = cur_model._meta
                 # Even if we're "just passing through" this model, we must add
                 # both the current model's pk and the related reference field
@@ -674,9 +676,9 @@ class Query(object):
         """ Increases the reference count for this alias. """
         self.alias_refcount[alias] += 1
 
-    def unref_alias(self, alias):
+    def unref_alias(self, alias, amount=1):
         """ Decreases the reference count for this alias. """
-        self.alias_refcount[alias] -= 1
+        self.alias_refcount[alias] -= amount
 
     def promote_alias(self, alias, unconditional=False):
         """
@@ -704,6 +706,15 @@ class Query(object):
         for alias in chain:
             if self.promote_alias(alias, must_promote):
                 must_promote = True
+
+    def reset_refcounts(self, to_counts):
+        """
+        This method will reset reference counts for aliases so that they match
+        the value passed in :param to_counts:.
+        """
+        for alias, cur_refcount in self.alias_refcount.copy().items():
+            unref_amount = cur_refcount - to_counts.get(alias, 0)
+            self.unref_alias(alias, unref_amount)
 
     def promote_unused_aliases(self, initial_refcounts, used_aliases):
         """
@@ -808,7 +819,7 @@ class Query(object):
         assert current < ord('Z')
         prefix = chr(current + 1)
         self.alias_prefix = prefix
-        change_map = {}
+        change_map = SortedDict()
         for pos, alias in enumerate(self.tables):
             if alias in exceptions:
                 continue
@@ -832,7 +843,8 @@ class Query(object):
     def count_active_tables(self):
         """
         Returns the number of tables in this query with a non-zero reference
-        count.
+        count. Note that after execution, the reference counts are zeroed, so
+        tables added in compiler will not be seen by this method.
         """
         return len([1 for count in self.alias_refcount.itervalues() if count])
 
@@ -931,7 +943,7 @@ class Query(object):
         seen = {None: root_alias}
 
         # Skip all proxy to the root proxied model
-        proxied_model = get_proxied_model(opts)
+        proxied_model = opts.concrete_model
 
         for field, model in opts.get_fields_with_model():
             if model not in seen:
@@ -1046,11 +1058,31 @@ class Query(object):
         if not parts:
             raise FieldError("Cannot parse keyword query %r" % arg)
 
-        # Work out the lookup type and remove it from 'parts', if necessary.
-        if len(parts) == 1 or parts[-1] not in self.query_terms:
-            lookup_type = 'exact'
-        else:
-            lookup_type = parts.pop()
+        # Work out the lookup type and remove it from the end of 'parts',
+        # if necessary.
+        lookup_type = 'exact' # Default lookup type
+        num_parts = len(parts)
+        if (len(parts) > 1 and parts[-1] in self.query_terms
+            and arg not in self.aggregates):
+            # Traverse the lookup query to distinguish related fields from
+            # lookup types.
+            lookup_model = self.model
+            for counter, field_name in enumerate(parts):
+                try:
+                    lookup_field = lookup_model._meta.get_field(field_name)
+                except FieldDoesNotExist:
+                    # Not a field. Bail out.
+                    lookup_type = parts.pop()
+                    break
+                # Unless we're at the end of the list of lookups, let's attempt
+                # to continue traversing relations.
+                if (counter + 1) < num_parts:
+                    try:
+                        lookup_model = lookup_field.rel.to
+                    except AttributeError:
+                        # Not a related field. Bail out.
+                        lookup_type = parts.pop()
+                        break
 
         # By default, this is a WHERE clause. If an aggregate is referenced
         # in the value, the filter will be promoted to a HAVING
@@ -1249,7 +1281,7 @@ class Query(object):
         case). Finally, 'negate' is used in the same sense as for add_filter()
         -- it indicates an exclude() filter, or something similar. It is only
         passed in here so that it can be passed to a field's extra_filter() for
-        customised behaviour.
+        customized behavior.
 
         Returns the final field involved in the join, the target database
         column (used for any 'where' constraint), the final 'opts' value and the
@@ -1290,7 +1322,7 @@ class Query(object):
             if model:
                 # The field lives on a base class of the current model.
                 # Skip the chain of proxy to the concrete proxied model
-                proxied_model = get_proxied_model(opts)
+                proxied_model = opts.concrete_model
 
                 for int_model in opts.get_base_chain(model):
                     if int_model is proxied_model:
@@ -1595,6 +1627,13 @@ class Query(object):
         """
         self.select = []
         self.select_fields = []
+
+    def add_distinct_fields(self, *field_names):
+        """
+        Adds and resolves the given fields to the query's "distinct on" clause.
+        """
+        self.distinct_fields = field_names
+        self.distinct = True
 
     def add_fields(self, field_names, allow_m2m=True):
         """
@@ -1948,11 +1987,3 @@ def add_to_dict(data, key, value):
         data[key].add(value)
     else:
         data[key] = set([value])
-
-def get_proxied_model(opts):
-    int_opts = opts
-    proxied_model = None
-    while int_opts.proxy:
-        proxied_model = int_opts.proxy_for_model
-        int_opts = proxied_model._meta
-    return proxied_model

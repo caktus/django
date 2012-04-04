@@ -347,6 +347,31 @@ function; this syntax is deprecated.
         return mark_safe(result)
     initial_letter_filter.needs_autoescape = True
 
+.. _filters-timezones:
+
+Filters and time zones
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. versionadded:: 1.4
+
+If you write a custom filter that operates on :class:`~datetime.datetime`
+objects, you'll usually register it with the ``expects_localtime`` flag set to
+``True``:
+
+.. code-block:: python
+
+    @register.filter(expects_localtime=True)
+    def businesshours(value):
+        try:
+            return 9 <= value.hour < 17
+        except AttributeError:
+            return ''
+
+When this flag is set, if the first argument to your filter is a time zone
+aware datetime, Django will convert it to the current time zone before passing
+to your filter when appropriate, according to :ref:`rules for time zones
+conversions in templates <time-zones-in-templates>`.
+
 Writing custom template tags
 ----------------------------
 
@@ -1130,7 +1155,7 @@ Template tags can work in tandem. For instance, the standard
 To create a template tag such as this, use ``parser.parse()`` in your
 compilation function.
 
-Here's how the standard :ttag:`{% comment %}<comment>` tag is implemented:
+Here's how a simplified ``{% comment %}`` tag might be implemented:
 
 .. code-block:: python
 
@@ -1142,6 +1167,14 @@ Here's how the standard :ttag:`{% comment %}<comment>` tag is implemented:
     class CommentNode(template.Node):
         def render(self, context):
             return ''
+
+.. note::
+    The actual implementation of :ttag:`{% comment %}<comment>` is slightly
+    different in that it allows broken template tags to appear between
+    ``{% comment %}`` and ``{% endcomment %}``. It does so by calling
+    ``parser.skip_past('endcomment')`` instead of ``parser.parse(('endcomment',))``
+    followed by ``parser.delete_first_token()``, thus avoiding the generation of a
+    node list.
 
 ``parser.parse()`` takes a tuple of names of block tags ''to parse until''. It
 returns an instance of ``django.template.NodeList``, which is a list of

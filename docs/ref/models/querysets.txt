@@ -32,10 +32,11 @@ You can evaluate a ``QuerySet`` in the following ways:
           print e.headline
 
 * **Slicing.** As explained in :ref:`limiting-querysets`, a ``QuerySet`` can
-  be sliced, using Python's array-slicing syntax. Usually slicing a
-  ``QuerySet`` returns another (unevaluated) ``QuerySet``, but Django will
-  execute the database query if you use the "step" parameter of slice
-  syntax.
+  be sliced, using Python's array-slicing syntax. Slicing an unevaluated
+  ``QuerySet`` usually returns another unevaluated ``QuerySet``, but Django
+  will execute the database query if you use the "step" parameter of slice
+  syntax, and will return a list. Slicing a ``QuerySet`` that has been
+  evaluated (partially or fully) also returns a list.
 
 * **Pickling/Caching.** See the following section for details of what
   is involved when `pickling QuerySets`_. The important thing for the
@@ -345,7 +346,7 @@ remain undefined afterward).
 distinct
 ~~~~~~~~
 
-.. method:: distinct()
+.. method:: distinct([*fields])
 
 Returns a new ``QuerySet`` that uses ``SELECT DISTINCT`` in its SQL query. This
 eliminates duplicate rows from the query results.
@@ -373,6 +374,49 @@ query spans multiple tables, it's possible to get duplicate results when a
     ordering by related models. Similarly, when using ``distinct()`` and
     :meth:`values()` together, be careful when ordering by fields not in the
     :meth:`values()` call.
+
+.. versionadded:: 1.4
+
+As of Django 1.4, you can pass positional arguments (``*fields``) in order to
+specify the names of fields to which the ``DISTINCT`` should apply. This
+translates to a ``SELECT DISTINCT ON`` SQL query.
+
+Here's the difference. For a normal ``distinct()`` call, the database compares
+*each* field in each row when determining which rows are distinct. For a
+``distinct()`` call with specified field names, the database will only compare
+the specified field names.
+
+.. note::
+    This ability to specify field names is only available in PostgreSQL.
+
+.. note::
+    When you specify field names, you *must* provide an ``order_by()`` in the
+    QuerySet, and the fields in ``order_by()`` must start with the fields in
+    ``distinct()``, in the same order.
+
+    For example, ``SELECT DISTINCT ON (a)`` gives you the first row for each
+    value in column ``a``. If you don't specify an order, you'll get some
+    arbitrary row.
+
+Examples::
+
+    >>> Author.objects.distinct()
+    [...]
+
+    >>> Entry.objects.order_by('pub_date').distinct('pub_date')
+    [...]
+
+    >>> Entry.objects.order_by('blog').distinct('blog')
+    [...]
+
+    >>> Entry.objects.order_by('author', 'pub_date').distinct('author', 'pub_date')
+    [...]
+
+    >>> Entry.objects.order_by('blog__name', 'mod_date').distinct('blog__name', 'mod_date')
+    [...]
+
+    >>> Entry.objects.order_by('author', 'pub_date').distinct('author')
+    [...]
 
 values
 ~~~~~~
@@ -545,6 +589,12 @@ Examples::
     [datetime.datetime(2005, 3, 20), datetime.datetime(2005, 2, 20)]
     >>> Entry.objects.filter(headline__contains='Lennon').dates('pub_date', 'day')
     [datetime.datetime(2005, 3, 20)]
+
+.. warning::
+
+    When :doc:`time zone support </topics/i18n/timezones>` is enabled, Django
+    uses UTC in the database connection, which means the aggregation is
+    performed in UTC. This is a known limitation of the current implementation.
 
 none
 ~~~~
@@ -814,6 +864,15 @@ relationships, the number of queries will depend on the data. Since a
 referenced is needed, rather than one query for all the items. There could be
 additional queries on the ``ContentType`` table if the relevant rows have not
 already been fetched.
+
+``prefetch_related`` in most cases will be implemented using a SQL query that
+uses the 'IN' operator. This means that for a large QuerySet a large 'IN' clause
+could be generated, which, depending on the database, might have performance
+problems of its own when it comes to parsing or executing the SQL query. Always
+profile for your use case!
+
+Note that if you use ``iterator()`` to run the query, ``prefetch_related()``
+calls will be ignored since these two optimizations do not make sense together.
 
 extra
 ~~~~~
@@ -1312,6 +1371,21 @@ This has a number of caveats though:
 * If the model's primary key is an :class:`~django.db.models.AutoField` it
   does not retrieve and set the primary key attribute, as ``save()`` does.
 
+.. admonition:: Limits of SQLite
+
+    SQLite sets a limit on the number of parameters per SQL statement. The
+    maximum is defined by the SQLITE_MAX_VARIABLE_NUMBER_ compilation option,
+    which defaults to 999. For instance, if your model has 8 fields (including
+    the primary key), you cannot create more than 999 // 8 = 124 instances at
+    a time. If you exceed this limit, you'll get an exception::
+
+        django.db.utils.DatabaseError: too many SQL variables
+
+    If your application's performance requirements exceed SQLite's limits, you
+    should switch to another database engine, such as PostgreSQL.
+
+.. _SQLITE_MAX_VARIABLE_NUMBER: http://sqlite.org/limits.html#max_variable_number
+
 count
 ~~~~~
 
@@ -1373,6 +1447,9 @@ performance and a significant reduction in memory.
 
 Note that using ``iterator()`` on a ``QuerySet`` which has already been
 evaluated will force it to evaluate again, repeating the query.
+
+Also, use of ``iterator()`` causes previous ``prefetch_related()`` calls to be
+ignored since these two optimizations do not make sense together.
 
 latest
 ~~~~~~
@@ -1697,6 +1774,12 @@ The above code fragment could also be written as follows::
     inner_q = Blog.objects.filter(name__contains='Cheddar').values('pk').query
     entries = Entry.objects.filter(blog__in=inner_q)
 
+.. warning::
+
+    This ``query`` attribute should be considered an opaque internal attribute.
+    It's fine to use it like above, but its API may change between Django
+    versions.
+
 This second form is a bit less readable and unnatural to write, since it
 accesses the internal ``query`` attribute and requires a ``ValuesQuerySet``.
 If your code doesn't require compatibility with Django 1.0, use the first
@@ -1716,12 +1799,6 @@ extract two field values, where only one is expected::
     # Bad code! Will raise a TypeError.
     inner_qs = Blog.objects.filter(name__contains='Ch').values('name', 'id')
     entries = Entry.objects.filter(blog__name__in=inner_qs)
-
-.. warning::
-
-    This ``query`` attribute should be considered an opaque internal attribute.
-    It's fine to use it like above, but its API may change between Django
-    versions.
 
 .. admonition:: Performance considerations
 
@@ -1953,6 +2030,13 @@ Note this will match any record with a ``pub_date`` that falls on a Monday (day
 2 of the week), regardless of the month or year in which it occurs. Week days
 are indexed with day 1 being Sunday and day 7 being Saturday.
 
+.. warning::
+
+    When :doc:`time zone support </topics/i18n/timezones>` is enabled, Django
+    uses UTC in the database connection, which means the ``year``, ``month``,
+    ``day`` and ``week_day`` lookups are performed in UTC. This is a known
+    limitation of the current implementation.
+
 .. fieldlookup:: isnull
 
 isnull
@@ -2059,10 +2143,10 @@ Avg
 
 .. class:: Avg(field)
 
-    Returns the mean value of the given field.
+    Returns the mean value of the given field, which must be numeric.
 
     * Default alias: ``<field>__avg``
-    * Return type: float
+    * Return type: ``float``
 
 Count
 ~~~~~
@@ -2072,14 +2156,15 @@ Count
     Returns the number of objects that are related through the provided field.
 
     * Default alias: ``<field>__count``
-    * Return type: integer
+    * Return type: ``int``
 
     Has one optional argument:
 
     .. attribute:: distinct
 
-        If distinct=True, the count will only include unique instances. This has
-        the SQL equivalent of ``COUNT(DISTINCT field)``. Default value is ``False``.
+        If ``distinct=True``, the count will only include unique instances.
+        This is the SQL equivalent of ``COUNT(DISTINCT <field>)``. The default
+        value is ``False``.
 
 Max
 ~~~
@@ -2109,7 +2194,7 @@ StdDev
     Returns the standard deviation of the data in the provided field.
 
     * Default alias: ``<field>__stddev``
-    * Return type: float
+    * Return type: ``float``
 
     Has one optional argument:
 
@@ -2120,9 +2205,10 @@ StdDev
 
     .. admonition:: SQLite
 
-        SQLite doesn't provide ``StdDev`` out of the box. An implementation is
-        available as an extension module for SQLite. Consult the SQlite
-        documentation for instructions on obtaining and installing this extension.
+        SQLite doesn't provide ``StdDev`` out of the box. An implementation
+        is available as an extension module for SQLite. Consult the `SQlite
+        documentation`_ for instructions on obtaining and installing this
+        extension.
 
 Sum
 ~~~
@@ -2142,7 +2228,7 @@ Variance
     Returns the variance of the data in the provided field.
 
     * Default alias: ``<field>__variance``
-    * Return type: float
+    * Return type: ``float``
 
     Has one optional argument:
 

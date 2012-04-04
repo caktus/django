@@ -51,7 +51,7 @@ Defines a block that can be overridden by child templates. See
 comment
 ^^^^^^^
 
-Ignores everything between ``{% comment %}`` and ``{% endcomment %}``
+Ignores everything between ``{% comment %}`` and ``{% endcomment %}``.
 
 .. templatetag:: csrf_token
 
@@ -88,7 +88,17 @@ You can use variables, too. For example, if you have two template variables,
         </tr>
     {% endfor %}
 
-Yes, you can mix variables and strings::
+Note that variable arguments (``rowvalue1`` and ``rowvalue2`` above) are NOT
+auto-escaped! So either make sure that you trust their values, or use explicit
+escaping, like this::
+
+    {% for o in some_list %}
+        <tr class="{% filter force_escape %}{% cycle rowvalue1 rowvalue2 %}{% endfilter %}">
+            ...
+        </tr>
+    {% endfor %}
+
+You can mix variables and strings::
 
     {% for o in some_list %}
         <tr class="{% cycle 'row1' rowvalue2 'row3' %}">
@@ -136,13 +146,6 @@ Note that the variables included in the cycle will not be escaped.
 This is because template tags do not escape their content. Any HTML or
 Javascript code contained in the printed variable will be rendered
 as-is, which could potentially lead to security issues.
-
-If you need to escape the variables in the cycle, you must do so
-explicitly::
-
-    {% filter force_escape %}
-        {% cycle var1 var2 var3 %}
-    {% endfilter %}
 
 For backwards compatibility, the ``{% cycle %}`` tag supports the much inferior
 old syntax from previous Django versions. You shouldn't use this in any new
@@ -227,12 +230,19 @@ Sample usage::
         This text will be HTML-escaped, and will appear in all lowercase.
     {% endfilter %}
 
+.. note::
+
+    The :tfilter:`escape` and :tfilter:`safe` filters are not acceptable
+    arguments. Instead, use the :ttag:`autoescape` tag to manage autoescaping
+    for blocks of template code.
+
 .. templatetag:: firstof
 
 firstof
 ^^^^^^^
 
-Outputs the first variable passed that is not False, without escaping.
+Outputs the first variable passed that is not False. Does NOT auto-escape
+variable values.
 
 Outputs nothing if all the passed variables are False.
 
@@ -258,9 +268,8 @@ passed variables are False::
 Note that the variables included in the firstof tag will not be
 escaped. This is because template tags do not escape their content.
 Any HTML or Javascript code contained in the printed variable will be
-rendered as-is, which could potentially lead to security issues.
-
-If you need to escape the variables in the firstof tag, you must do so
+rendered as-is, which could potentially lead to security issues. If you
+need to escape the variables in the firstof tag, you must do so
 explicitly::
 
     {% filter force_escape %}
@@ -356,6 +365,8 @@ block are output::
 
     {% if athlete_list %}
         Number of athletes: {{ athlete_list|length }}
+    {% elif athlete_in_locker_room_list %}
+        Athletes should be out of the locker room soon!
     {% else %}
         No athletes.
     {% endif %}
@@ -363,8 +374,13 @@ block are output::
 In the above, if ``athlete_list`` is not empty, the number of athletes will be
 displayed by the ``{{ athlete_list|length }}`` variable.
 
-As you can see, the ``if`` tag can take an optional ``{% else %}`` clause that
-will be displayed if the test fails.
+As you can see, the ``if`` tag may take one or several `` {% elif %}``
+clauses, as well as an ``{% else %}`` clause that will be displayed if all
+previous conditions fail. These clauses are optional.
+
+.. versionadded:: 1.4
+
+The ``if`` tag now supports ``{% elif %}`` clauses.
 
 Boolean operators
 ^^^^^^^^^^^^^^^^^
@@ -698,9 +714,10 @@ load
 Loads a custom template tag set.
 
 For example, the following template would load all the tags and filters
-registered in ``somelibrary`` and ``otherlibrary``::
+registered in ``somelibrary`` and ``otherlibrary`` located in package
+``package``::
 
-    {% load somelibrary otherlibrary %}
+    {% load somelibrary package.otherlibrary %}
 
 .. versionchanged:: 1.3
 
@@ -772,12 +789,17 @@ is a list of people represented by dictionaries with ``first_name``,
 like this:
 
 * Male:
+
   * George Bush
   * Bill Clinton
+
 * Female:
+
   * Margaret Thatcher
   * Condoleezza Rice
+
 * Unknown:
+
   * Pat Smith
 
 You can use the ``{% regroup %}`` tag to group the list of people by gender.
@@ -831,14 +853,23 @@ With this input for ``people``, the example ``{% regroup %}`` template code
 above would result in the following output:
 
 * Male:
+
   * Bill Clinton
+
 * Unknown:
+
   * Pat Smith
+
 * Female:
+
   * Margaret Thatcher
+
 * Male:
+
   * George Bush
+
 * Female:
+
   * Condoleezza Rice
 
 The easiest solution to this gotcha is to make sure in your view code that the
@@ -1245,8 +1276,8 @@ date
 
 Formats a date according to the given format.
 
-Uses the same format as PHP's ``date()`` function (http://php.net/date)
-with some custom extensions.
+Uses a similar format as PHP's ``date()`` function (http://php.net/date)
+with some differences.
 
 Available format strings:
 
@@ -1268,6 +1299,9 @@ c                 ISO 8601 format. (Note: unlike others     ``2008-01-02T10:30:0
 d                 Day of the month, 2 digits with           ``'01'`` to ``'31'``
                   leading zeros.
 D                 Day of the week, textual, 3 letters.      ``'Fri'``
+e                 Timezone name. Could be in any format,
+                  or might return an empty string,          ``''``, ``'GMT'``, ``'-500'``, ``'US/Eastern'``, etc.
+                  depending on the datetime.
 E                 Month, locale specific alternative
                   representation usually used for long
                   date representation.                      ``'listopada'`` (for Polish locale, as opposed to ``'Listopad'``)
@@ -1292,6 +1326,9 @@ M                 Month, textual, 3 letters.                ``'Jan'``
 n                 Month without leading zeros.              ``'1'`` to ``'12'``
 N                 Month abbreviation in Associated Press    ``'Jan.'``, ``'Feb.'``, ``'March'``, ``'May'``
                   style. Proprietary extension.
+o                 ISO-8601 week-numbering year,             ``'1999'``
+                  corresponding to
+                  the ISO-8601 week number (W)
 O                 Difference to Greenwich time in hours.    ``'+0200'``
 P                 Time, in 12-hour hours, minutes and       ``'1 a.m.'``, ``'1:30 p.m.'``, ``'midnight'``, ``'noon'``, ``'12:30 p.m.'``
                   'a.m.'/'p.m.', with minutes left off
@@ -1323,6 +1360,10 @@ Z                 Time zone offset in seconds. The          ``-43200`` to ``4320
 .. versionadded:: 1.2
 
 The ``c`` and ``u`` format specification characters were added in Django 1.2.
+
+.. versionadded:: 1.4
+
+The ``e`` and ``o`` format specification characters were added in Django 1.4.
 
 For example::
 
@@ -1917,7 +1958,7 @@ slice
 Returns a slice of the list.
 
 Uses the same syntax as Python's list slicing. See
-http://diveintopython.org/native_data_types/lists.html#odbchelper.list.slice
+http://diveintopython.net/native_data_types/lists.html#odbchelper.list.slice
 for an introduction.
 
 Example::
@@ -2195,16 +2236,21 @@ urlize
 
 Converts URLs in text into clickable links.
 
-Works on links prefixed with ``http://``, ``https://``, or ``www.``. For
-example, ``http://goo.gl/aia1t`` will get converted but ``goo.gl/aia1t``
-won't.
+This template tag works on links prefixed with ``http://``, ``https://``, or
+``www.``. For example, ``http://goo.gl/aia1t`` will get converted but
+``goo.gl/aia1t`` won't.
 
-Also works on domain-only links ending in one of the common ``.com``, ``.net``,
-or ``.org`` top level domains. For example, ``djangoproject.com`` will still
-get converted.
+It also supports domain-only links ending in one of the original top level
+domains (``.com``, ``.edu``, ``.gov``, ``.int``, ``.mil``, ``.net``, and
+``.org``). For example, ``djangoproject.com`` gets converted.
+
+.. versionchanged:: 1.4
+
+Until Django 1.4, only the ``.com``, ``.net`` and ``.org`` suffixes were
+supported for domain-only links.
 
 Links can have trailing punctuation (periods, commas, close-parens) and leading
-punctuation (opening parens) and ``urlize`` will still do the right thing.
+punctuation (opening parens), and ``urlize`` will still do the right thing.
 
 Links generated by ``urlize`` have a ``rel="nofollow"`` attribute added
 to them.
@@ -2304,8 +2350,45 @@ Value       Argument                Outputs
                                     if no mapping for None is given)
 ==========  ======================  ==================================
 
-Other tags and filter libraries
--------------------------------
+Internationalization tags and filters
+-------------------------------------
+
+Django provides template tags and filters to control each aspect of
+:doc:`internationalization </topics/i18n/index>` in templates. They allow for
+granular control of translations, formatting, and time zone conversions.
+
+i18n
+^^^^
+
+This library allows specifying translatable text in templates.
+To enable it, set :setting:`USE_I18N` to ``True``, then load it with
+``{% load i18n %}``.
+
+See :ref:`specifying-translation-strings-in-template-code`.
+
+l10n
+^^^^
+
+This library provides control over the localization of values in templates.
+You only need to load the library using ``{% load l10n %}``, but you'll often
+set :setting:`USE_L10N` to ``True`` so that localization is active by default.
+
+See :ref:`topic-l10n-templates`.
+
+tz
+^^
+
+.. versionadded:: 1.4
+
+This library provides control over time zone conversions in templates.
+Like ``l10n``, you only need to load the library using ``{% load tz %}``,
+but you'll usually also set :setting:`USE_TZ` to ``True`` so that conversion
+to local time happens by default.
+
+See :ref:`time-zones-in-templates`.
+
+Other tags and filters libraries
+--------------------------------
 
 Django comes with a couple of other template-tag libraries that you have to
 enable explicitly in your :setting:`INSTALLED_APPS` setting and enable in your
@@ -2333,28 +2416,6 @@ django.contrib.webdesign
 
 A collection of template tags that can be useful while designing a Web site,
 such as a generator of Lorem Ipsum text. See :doc:`/ref/contrib/webdesign`.
-
-i18n
-^^^^
-
-Provides a couple of templatetags that allow specifying translatable text in
-Django templates. It is slightly different from the libraries described
-above because you don't need to add any application to the
-:setting:`INSTALLED_APPS` setting but rather set :setting:`USE_I18N` to True,
-then loading it with ``{% load i18n %}``.
-
-See :ref:`specifying-translation-strings-in-template-code`.
-
-l10n
-^^^^
-
-Provides a couple of templatetags that allow control over the localization of
-values in Django templates. It is slightly different from the libraries
-described above because you don't need to add any application to the
-:setting:`INSTALLED_APPS`; you only need to load the library using
-``{% load l10n %}``.
-
-See :ref:`topic-l10n-templates`.
 
 static
 ^^^^^^

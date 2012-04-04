@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import with_statement, absolute_import
+from __future__ import absolute_import
 
 from django.conf import settings
 
@@ -8,7 +8,7 @@ if __name__ == '__main__':
     # before importing 'template'.
     settings.configure()
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import time
 import os
 import sys
@@ -394,7 +394,7 @@ class Templates(unittest.TestCase):
         try:
             t = Template("{% if 1 %}lala{% endblock %}{% endif %}")
         except TemplateSyntaxError, e:
-            self.assertEqual(e.args[0], "Invalid block tag: 'endblock', expected 'else' or 'endif'")
+            self.assertEqual(e.args[0], "Invalid block tag: 'endblock', expected 'elif', 'else' or 'endif'")
 
     def test_templates(self):
         template_tests = self.get_template_tests()
@@ -425,7 +425,9 @@ class Templates(unittest.TestCase):
 
         #Set ALLOWED_INCLUDE_ROOTS so that ssi works.
         old_allowed_include_roots = settings.ALLOWED_INCLUDE_ROOTS
-        settings.ALLOWED_INCLUDE_ROOTS = os.path.dirname(os.path.abspath(__file__))
+        settings.ALLOWED_INCLUDE_ROOTS = (
+            os.path.dirname(os.path.abspath(__file__)),
+        )
 
         # Warm the URL reversing cache. This ensures we don't pay the cost
         # warming the cache during one of the tests.
@@ -788,6 +790,7 @@ class Templates(unittest.TestCase):
             'firstof07': ('{% firstof a b "c" %}', {'a':0}, 'c'),
             'firstof08': ('{% firstof a b "c and d" %}', {'a':0,'b':0}, 'c and d'),
             'firstof09': ('{% firstof %}', {}, template.TemplateSyntaxError),
+            'firstof10': ('{% firstof a %}', {'a': '<'}, '<'), # Variables are NOT auto-escaped.
 
             ### FOR TAG ###############################################################
             'for-tag01': ("{% for val in values %}{{ val }}{% endfor %}", {"values": [1, 2, 3]}, "123"),
@@ -821,6 +824,17 @@ class Templates(unittest.TestCase):
             'if-tag01': ("{% if foo %}yes{% else %}no{% endif %}", {"foo": True}, "yes"),
             'if-tag02': ("{% if foo %}yes{% else %}no{% endif %}", {"foo": False}, "no"),
             'if-tag03': ("{% if foo %}yes{% else %}no{% endif %}", {}, "no"),
+
+            'if-tag04': ("{% if foo %}foo{% elif bar %}bar{% endif %}", {'foo': True}, "foo"),
+            'if-tag05': ("{% if foo %}foo{% elif bar %}bar{% endif %}", {'bar': True}, "bar"),
+            'if-tag06': ("{% if foo %}foo{% elif bar %}bar{% endif %}", {}, ""),
+            'if-tag07': ("{% if foo %}foo{% elif bar %}bar{% else %}nothing{% endif %}", {'foo': True}, "foo"),
+            'if-tag08': ("{% if foo %}foo{% elif bar %}bar{% else %}nothing{% endif %}", {'bar': True}, "bar"),
+            'if-tag09': ("{% if foo %}foo{% elif bar %}bar{% else %}nothing{% endif %}", {}, "nothing"),
+            'if-tag10': ("{% if foo %}foo{% elif bar %}bar{% elif baz %}baz{% else %}nothing{% endif %}", {'foo': True}, "foo"),
+            'if-tag11': ("{% if foo %}foo{% elif bar %}bar{% elif baz %}baz{% else %}nothing{% endif %}", {'bar': True}, "bar"),
+            'if-tag12': ("{% if foo %}foo{% elif bar %}bar{% elif baz %}baz{% else %}nothing{% endif %}", {'baz': True}, "baz"),
+            'if-tag13': ("{% if foo %}foo{% elif bar %}bar{% elif baz %}baz{% else %}nothing{% endif %}", {}, "nothing"),
 
             # Filters
             'if-tag-filter01': ("{% if foo|length == 5 %}yes{% else %}no{% endif %}", {'foo': 'abcde'}, "yes"),
@@ -1192,18 +1206,26 @@ class Templates(unittest.TestCase):
             'inheritance40': ("{% extends 'inheritance33' %}{% block opt %}new{{ block.super }}{% endblock %}", {'optional': 1}, '1new23'),
             'inheritance41': ("{% extends 'inheritance36' %}{% block opt %}new{{ block.super }}{% endblock %}", {'numbers': '123'}, '_new1_new2_new3_'),
 
+            # Expression starting and ending with a quote
+            'inheritance42': ("{% extends 'inheritance02'|cut:' ' %}", {}, '1234'),
+
             ### LOADING TAG LIBRARIES #################################################
+            'load01': ("{% load testtags subpackage.echo %}{% echo test %} {% echo2 \"test\" %}", {}, "test test"),
+            'load02': ("{% load subpackage.echo %}{% echo2 \"test\" %}", {}, "test"),
 
             # {% load %} tag, importing individual tags
-            'load1': ("{% load echo from testtags %}{% echo this that theother %}", {}, 'this that theother'),
-            'load2': ("{% load echo other_echo from testtags %}{% echo this that theother %} {% other_echo and another thing %}", {}, 'this that theother and another thing'),
-            'load3': ("{% load echo upper from testtags %}{% echo this that theother %} {{ statement|upper }}", {'statement': 'not shouting'}, 'this that theother NOT SHOUTING'),
+            'load03': ("{% load echo from testtags %}{% echo this that theother %}", {}, 'this that theother'),
+            'load04': ("{% load echo other_echo from testtags %}{% echo this that theother %} {% other_echo and another thing %}", {}, 'this that theother and another thing'),
+            'load05': ("{% load echo upper from testtags %}{% echo this that theother %} {{ statement|upper }}", {'statement': 'not shouting'}, 'this that theother NOT SHOUTING'),
+            'load06': ("{% load echo2 from subpackage.echo %}{% echo2 \"test\" %}", {}, "test"),
 
             # {% load %} tag errors
-            'load4': ("{% load echo other_echo bad_tag from testtags %}", {}, template.TemplateSyntaxError),
-            'load5': ("{% load echo other_echo bad_tag from %}", {}, template.TemplateSyntaxError),
-            'load6': ("{% load from testtags %}", {}, template.TemplateSyntaxError),
-            'load7': ("{% load echo from bad_library %}", {}, template.TemplateSyntaxError),
+            'load07': ("{% load echo other_echo bad_tag from testtags %}", {}, template.TemplateSyntaxError),
+            'load08': ("{% load echo other_echo bad_tag from %}", {}, template.TemplateSyntaxError),
+            'load09': ("{% load from testtags %}", {}, template.TemplateSyntaxError),
+            'load10': ("{% load echo from bad_library %}", {}, template.TemplateSyntaxError),
+            'load11': ("{% load subpackage.echo_invalid %}", {}, template.TemplateSyntaxError),
+            'load12': ("{% load subpackage.missing %}", {}, template.TemplateSyntaxError),
 
             ### I18N ##################################################################
 
@@ -1359,6 +1381,33 @@ class Templates(unittest.TestCase):
                           '{% endfor %},'
                           '{% endfor %}',
                           {}, ''),
+
+            # Regression tests for #17675
+            # The date template filter has expects_localtime = True
+            'regroup03': ('{% regroup data by at|date:"m" as grouped %}'
+                          '{% for group in grouped %}'
+                          '{{ group.grouper }}:'
+                          '{% for item in group.list %}'
+                          '{{ item.at|date:"d" }}'
+                          '{% endfor %},'
+                          '{% endfor %}',
+                          {'data': [{'at': date(2012, 2, 14)},
+                                    {'at': date(2012, 2, 28)},
+                                    {'at': date(2012, 7, 4)}]},
+                          '02:1428,07:04,'),
+            # The join template filter has needs_autoescape = True
+            'regroup04': ('{% regroup data by bar|join:"" as grouped %}'
+                          '{% for group in grouped %}'
+                          '{{ group.grouper }}:'
+                          '{% for item in group.list %}'
+                          '{{ item.foo|first }}'
+                          '{% endfor %},'
+                          '{% endfor %}',
+                          {'data': [{'foo': 'x', 'bar': ['ab', 'c']},
+                                    {'foo': 'y', 'bar': ['a', 'bc']},
+                                    {'foo': 'z', 'bar': ['a', 'd']}]},
+                          'abc:xy,ad:z,'),
+
             ### SSI TAG ########################################################
 
             # Test normal behavior
@@ -1412,7 +1461,7 @@ class Templates(unittest.TestCase):
 
             ### WIDTHRATIO TAG ########################################################
             'widthratio01': ('{% widthratio a b 0 %}', {'a':50,'b':100}, '0'),
-            'widthratio02': ('{% widthratio a b 100 %}', {'a':0,'b':0}, ''),
+            'widthratio02': ('{% widthratio a b 100 %}', {'a':0,'b':0}, '0'),
             'widthratio03': ('{% widthratio a b 100 %}', {'a':0,'b':100}, '0'),
             'widthratio04': ('{% widthratio a b 100 %}', {'a':50,'b':100}, '50'),
             'widthratio05': ('{% widthratio a b 100 %}', {'a':100,'b':100}, '100'),
@@ -1445,14 +1494,18 @@ class Templates(unittest.TestCase):
 
             ### NOW TAG ########################################################
             # Simple case
-            'now01': ('{% now "j n Y"%}', {}, str(datetime.now().day) + ' ' + str(datetime.now().month) + ' ' + str(datetime.now().year)),
-
-            # Check parsing of escaped and special characters
-            'now02': ('{% now "j "n" Y"%}', {}, template.TemplateSyntaxError),
-        #    'now03': ('{% now "j \"n\" Y"%}', {}, str(datetime.now().day) + '"' + str(datetime.now().month) + '"' + str(datetime.now().year)),
-        #    'now04': ('{% now "j \nn\n Y"%}', {}, str(datetime.now().day) + '\n' + str(datetime.now().month) + '\n' + str(datetime.now().year))
+            'now01': ('{% now "j n Y" %}', {}, "%d %d %d" % (
+                datetime.now().day, datetime.now().month, datetime.now().year)),
             # Check parsing of locale strings
-            'now05': ('{% now "DATE_FORMAT" %}', {},  date_format(datetime.now())),
+            'now02': ('{% now "DATE_FORMAT" %}', {},  date_format(datetime.now())),
+            # Also accept simple quotes - #15092
+            'now03': ("{% now 'j n Y' %}", {}, "%d %d %d" % (
+                datetime.now().day, datetime.now().month, datetime.now().year)),
+            'now04': ("{% now 'DATE_FORMAT' %}", {},  date_format(datetime.now())),
+            'now05': ('''{% now 'j "n" Y'%}''', {}, '''%d "%d" %d''' % (
+                datetime.now().day, datetime.now().month, datetime.now().year)),
+            'now06': ('''{% now "j 'n' Y"%}''', {}, '''%d '%d' %d''' % (
+                datetime.now().day, datetime.now().month, datetime.now().year)),
 
             ### URL TAG ########################################################
             # Successes

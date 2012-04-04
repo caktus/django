@@ -892,16 +892,16 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
 
     def test23_transform_nosrid(self):
         """ Testing `transform` method (no SRID) """
-        # raise a warning if SRID <0/None
+        # Raise a warning if SRID <0/None.
         import warnings
         print "\nBEGIN - expecting Warnings; safe to ignore.\n"
 
-        # test for do-nothing behaviour.
+        # Test for do-nothing behavior.
         try:
             # Keeping line-noise down by only printing the relevant
             # warnings once.
             warnings.simplefilter('once', UserWarning)
-            warnings.simplefilter('once', FutureWarning)    
+            warnings.simplefilter('once', FutureWarning)
 
             g = GEOSGeometry('POINT (-104.609 38.255)', srid=None)
             g.transform(2774)
@@ -1048,6 +1048,18 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
         self.assertTrue(g.valid_reason.startswith("Too few points in geometry component"))
 
         print "\nEND - expecting GEOS_NOTICE; safe to ignore.\n"
+
+    def test28_geos_version(self):
+        "Testing the GEOS version regular expression."
+        from django.contrib.gis.geos.libgeos import version_regex
+        versions = [ ('3.0.0rc4-CAPI-1.3.3', '3.0.0'),
+                     ('3.0.0-CAPI-1.4.1', '3.0.0'),
+                     ('3.4.0dev-CAPI-1.8.0', '3.4.0') ]
+        for v, expected in versions:
+            m = version_regex.match(v)
+            self.assertTrue(m)
+            self.assertEqual(m.group('version'), expected)
+
 
 def suite():
     s = unittest.TestSuite()

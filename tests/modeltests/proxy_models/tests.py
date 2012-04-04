@@ -167,6 +167,13 @@ class ProxyModelTests(TestCase):
         resp = [p.name for p in OtherPerson._default_manager.all()]
         self.assertEqual(resp, ['barney', 'wilma'])
 
+    def test_permissions_created(self):
+        from django.contrib.auth.models import Permission
+        try:
+            Permission.objects.get(name="May display users information")
+        except Permission.DoesNotExist:
+            self.fail("The permission 'May display users information' has not been created")
+
     def test_proxy_model_signals(self):
         """
         Test save signals for proxy models
@@ -231,6 +238,12 @@ class ProxyModelTests(TestCase):
 
         resp = [u.name for u in UserProxyProxy.objects.all()]
         self.assertEqual(resp, ['Bruce'])
+
+    def test_proxy_for_model(self):
+        self.assertEqual(UserProxy, UserProxyProxy._meta.proxy_for_model)
+
+    def test_concrete_model(self):
+        self.assertEqual(User, UserProxyProxy._meta.concrete_model)
 
     def test_proxy_delete(self):
         """

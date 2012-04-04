@@ -29,7 +29,7 @@ readability of your code. **All** of the suggestions below come with the caveat
 that in your circumstances the general principle might not apply, or might even
 be reversed.
 
-.. _django-debug-toolbar: http://robhudson.github.com/django-debug-toolbar/
+.. _django-debug-toolbar: https://github.com/django-debug-toolbar/django-debug-toolbar/
 
 Use standard DB optimization techniques
 =======================================
@@ -283,21 +283,23 @@ number of SQL queries. For example::
         Entry(headline="Python 3.1 Planned")
     ])
 
-Is preferable to::
+...is preferable to::
 
     Entry.objects.create(headline="Python 3.0 Released")
     Entry.objects.create(headline="Python 3.1 Planned")
 
 Note that there are a number of :meth:`caveats to this method
-<django.db.models.query.QuerySet.bulk_create>`, make sure it is appropriate for
-your use case. This also applies to :class:`ManyToManyFields
-<django.db.models.ManyToManyField>`, doing::
+<django.db.models.query.QuerySet.bulk_create>`, so make sure it's appropriate
+for your use case.
+
+This also applies to :class:`ManyToManyFields
+<django.db.models.ManyToManyField>`, so doing::
 
     my_band.members.add(me, my_friend)
 
-Is preferable to::
+...is preferable to::
 
     my_band.members.add(me)
     my_band.members.add(my_friend)
 
-Where ``Bands`` and ``Artists`` have a many-to-many relationship.
+...where ``Bands`` and ``Artists`` have a many-to-many relationship.

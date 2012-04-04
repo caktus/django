@@ -1,5 +1,3 @@
-from __future__ import with_statement
-
 import urllib
 
 from django.db import models
@@ -30,6 +28,13 @@ class FooWithUrl(FooWithoutUrl):
     def get_absolute_url(self):
         return "/users/%s/" % urllib.quote(smart_str(self.name))
 
+class FooWithBrokenAbsoluteUrl(FooWithoutUrl):
+    """
+    Fake model defining a ``get_absolute_url`` method containing an error
+    """
+
+    def get_absolute_url(self):
+        return "/users/%s/" % self.unknown_field
 
 class ContentTypesTests(TestCase):
 
@@ -44,8 +49,8 @@ class ContentTypesTests(TestCase):
     def test_lookup_cache(self):
         """
         Make sure that the content type cache (see ContentTypeManager)
-        works correctly. Lookups for a particular content type -- by model or
-        by ID -- should hit the database only on the first lookup.
+        works correctly. Lookups for a particular content type -- by model, ID
+        or natural key -- should hit the database only on the first lookup.
         """
 
         # At this point, a lookup for a ContentType should hit the DB
@@ -53,15 +58,29 @@ class ContentTypesTests(TestCase):
             ContentType.objects.get_for_model(ContentType)
 
         # A second hit, though, won't hit the DB, nor will a lookup by ID
+        # or natural key
         with self.assertNumQueries(0):
             ct = ContentType.objects.get_for_model(ContentType)
         with self.assertNumQueries(0):
             ContentType.objects.get_for_id(ct.id)
+        with self.assertNumQueries(0):
+            ContentType.objects.get_by_natural_key('contenttypes',
+                                                   'contenttype')
 
         # Once we clear the cache, another lookup will again hit the DB
         ContentType.objects.clear_cache()
         with self.assertNumQueries(1):
             ContentType.objects.get_for_model(ContentType)
+
+        # The same should happen with a lookup by natural key
+        ContentType.objects.clear_cache()
+        with self.assertNumQueries(1):
+            ContentType.objects.get_by_natural_key('contenttypes',
+                                                   'contenttype')
+        # And a second hit shouldn't hit the DB
+        with self.assertNumQueries(0):
+            ContentType.objects.get_by_natural_key('contenttypes',
+                                                   'contenttype')
 
     def test_get_for_models_empty_cache(self):
         # Empty cache.
@@ -134,6 +153,22 @@ class ContentTypesTests(TestCase):
         obj = FooWithoutUrl.objects.create(name="john")
 
         self.assertRaises(Http404, shortcut, request, user_ct.id, obj.id)
+
+    def test_shortcut_view_with_broken_get_absolute_url(self):
+        """
+        Check that the shortcut view does not catch an AttributeError raised
+        by the model's get_absolute_url method.
+        Refs #8997.
+        """
+        request = HttpRequest()
+        request.META = {
+            "SERVER_NAME": "Example.com",
+            "SERVER_PORT": "80",
+        }
+        user_ct = ContentType.objects.get_for_model(FooWithBrokenAbsoluteUrl)
+        obj = FooWithBrokenAbsoluteUrl.objects.create(name="john")
+
+        self.assertRaises(AttributeError, shortcut, request, user_ct.id, obj.id)
 
     def test_missing_model(self):
         """

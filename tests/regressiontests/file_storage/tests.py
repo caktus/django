@@ -2,7 +2,6 @@
 import errno
 import os
 import shutil
-import sys
 import tempfile
 import time
 from datetime import datetime, timedelta
@@ -229,8 +228,8 @@ class FileStorageTests(unittest.TestCase):
 
         # should encode special chars except ~!*()'
         # like encodeURIComponent() JavaScript function do
-        self.assertEqual(self.storage.url(r"""~!*()'@#$%^&*abc`+=.file"""),
-            """/test_media_url/~!*()'%40%23%24%25%5E%26*abc%60%2B%3D.file""")
+        self.assertEqual(self.storage.url(r"""~!*()'@#$%^&*abc`+ =.file"""),
+            """/test_media_url/~!*()'%40%23%24%25%5E%26*abc%60%2B%20%3D.file""")
 
         # should stanslate os path separator(s) to the url path separator
         self.assertEqual(self.storage.url("""a/b\\c.file"""),
@@ -470,12 +469,7 @@ class FileStoragePathParsing(unittest.TestCase):
         self.storage.save('dotted.path/.test', ContentFile("2"))
 
         self.assertTrue(os.path.exists(os.path.join(self.storage_dir, 'dotted.path/.test')))
-        # Before 2.6, a leading dot was treated as an extension, and so
-        # underscore gets added to beginning instead of end.
-        if sys.version_info < (2, 6):
-            self.assertTrue(os.path.exists(os.path.join(self.storage_dir, 'dotted.path/_1.test')))
-        else:
-            self.assertTrue(os.path.exists(os.path.join(self.storage_dir, 'dotted.path/.test_1')))
+        self.assertTrue(os.path.exists(os.path.join(self.storage_dir, 'dotted.path/.test_1')))
 
 class DimensionClosingBug(unittest.TestCase):
     """
@@ -542,3 +536,14 @@ class InconsistentGetImageDimensionsBug(unittest.TestCase):
         size_1, size_2 = get_image_dimensions(image), get_image_dimensions(image)
         self.assertEqual(image_pil.size, size_1)
         self.assertEqual(size_1, size_2)
+
+class ContentFileTestCase(unittest.TestCase):
+    """
+    Test that the constructor of ContentFile accepts 'name' (#16590).
+    """
+    def test_content_file_default_name(self):
+        self.assertEqual(ContentFile("content").name, None)
+
+    def test_content_file_custome_name(self):
+        name = "I can have a name too!"
+        self.assertEqual(ContentFile("content", name=name).name, name)

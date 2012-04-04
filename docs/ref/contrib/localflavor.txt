@@ -156,7 +156,7 @@ any code you'd like to contribute. One thing we ask is that you please use
 Unicode objects (``u'mystring'``) for strings, rather than setting the encoding
 in the file. See any of the existing flavors for examples.
 
-.. _create a ticket: http://code.djangoproject.com/simpleticket
+.. _create a ticket: https://code.djangoproject.com/simpleticket
 
 Localflavor and backwards compatibility
 =======================================
@@ -960,8 +960,8 @@ Poland (``pl``)
 
 .. class:: pl.forms.PLNIPField
 
-    A form field that validates input as a Polish Tax Number (NIP). Valid
-    formats are XXX-XXX-XX-XX or XX-XX-XXX-XXX. The checksum algorithm used
+    A form field that validates input as a Polish Tax Number (NIP). Valid formats
+    are XXX-XXX-XX-XX, XXX-XX-XX-XXX or XXXXXXXXXX. The checksum algorithm used
     for NIPs is documented at http://wipos.p.lodz.pl/zylla/ut/nip-rego.html.
 
 .. class:: pl.forms.PLCountySelect

@@ -83,13 +83,25 @@ repository:
 
   For the curious: we're using a `Trac post-commit hook`_ for this.
 
-  .. _Trac post-commit hook: http://trac.edgewall.org/browser/trunk/contrib/trac-post-commit-hook
+  .. _Trac post-commit hook: http://trac.edgewall.org/browser/trunk/contrib/trac-svn-post-commit-hook.cmd
 
 * If your commit references a ticket in the Django `ticket tracker`_ but
   does *not* close the ticket, include the phrase "Refs #abc", where "abc"
   is the number of the ticket your commit references. We've rigged
   Subversion and Trac so that any commit message in that format will
   automatically post a comment to the appropriate ticket.
+
+* Write commit messages for backports using this pattern::
+
+    [<Django version>] Fixed <ticket> -- <description>
+
+    Backport of <revision> from <branch>.
+
+  For example::
+
+    [1.3.X] Fixed #17028 - Changed diveintopython.org -> diveintopython.net.
+
+    Backport of r17115 from trunk.
 
 Reverting commits
 -----------------
@@ -128,4 +140,4 @@ discovered, please follow these guidelines:
   branch without permission if the commit breaks the release branch.
 
 .. _django-developers: http://groups.google.com/group/django-developers
-.. _ticket tracker: http://code.djangoproject.com/newticket
+.. _ticket tracker: https://code.djangoproject.com/newticket

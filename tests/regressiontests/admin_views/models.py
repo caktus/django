@@ -3,7 +3,6 @@ import datetime
 import tempfile
 import os
 
-from django import forms
 from django.contrib.auth.models import User
 from django.contrib.contenttypes import generic
 from django.contrib.contenttypes.models import ContentType
@@ -106,6 +105,10 @@ class Color(models.Model):
     def __unicode__(self):
         return self.value
 
+# we replicate Color to register with another ModelAdmin
+class Color2(Color):
+    class Meta:
+        proxy = True
 
 class Thing(models.Model):
     title = models.CharField(max_length=20)
@@ -538,13 +541,68 @@ class ComplexSortedPerson(models.Model):
     age = models.PositiveIntegerField()
     is_employee = models.NullBooleanField()
 
-class PrePopulatedPostLargeSlug(models.Model): 
-    """ 
-    Regression test for #15938: a large max_length for the slugfield must not 
-    be localized in prepopulated_fields_js.html or it might end up breaking 
-    the javascript (ie, using THOUSAND_SEPARATOR ends up with maxLength=1,000) 
-    """ 
-    title = models.CharField(max_length=100) 
-    published = models.BooleanField() 
+class PrePopulatedPostLargeSlug(models.Model):
+    """
+    Regression test for #15938: a large max_length for the slugfield must not
+    be localized in prepopulated_fields_js.html or it might end up breaking
+    the javascript (ie, using THOUSAND_SEPARATOR ends up with maxLength=1,000)
+    """
+    title = models.CharField(max_length=100)
+    published = models.BooleanField()
     slug = models.SlugField(max_length=1000)
-    
+
+class AdminOrderedField(models.Model):
+    order = models.IntegerField()
+    stuff = models.CharField(max_length=200)
+
+class AdminOrderedModelMethod(models.Model):
+    order = models.IntegerField()
+    stuff = models.CharField(max_length=200)
+    def some_order(self):
+        return self.order
+    some_order.admin_order_field = 'order'
+
+class AdminOrderedAdminMethod(models.Model):
+    order = models.IntegerField()
+    stuff = models.CharField(max_length=200)
+
+class AdminOrderedCallable(models.Model):
+    order = models.IntegerField()
+    stuff = models.CharField(max_length=200)
+
+class Report(models.Model):
+    title = models.CharField(max_length=100)
+
+    def __unicode__(self):
+        return self.title
+
+
+class MainPrepopulated(models.Model):
+    name = models.CharField(max_length=100)
+    pubdate = models.DateField()
+    status = models.CharField(
+        max_length=20,
+        choices=(('option one', 'Option One'),
+                 ('option two', 'Option Two')))
+    slug1 = models.SlugField()
+    slug2 = models.SlugField()
+
+class RelatedPrepopulated(models.Model):
+    parent = models.ForeignKey(MainPrepopulated)
+    name = models.CharField(max_length=75)
+    pubdate = models.DateField()
+    status = models.CharField(
+        max_length=20,
+        choices=(('option one', 'Option One'),
+                 ('option two', 'Option Two')))
+    slug1 = models.SlugField(max_length=50)
+    slug2 = models.SlugField(max_length=60)
+
+
+class UnorderedObject(models.Model):
+    """
+    Model without any defined `Meta.ordering`.
+    Refs #16819.
+    """
+    name = models.CharField(max_length=255)
+    bool = models.BooleanField(default=True)

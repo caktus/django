@@ -238,13 +238,12 @@ Karen Tracey
 `Carl Meyer`_
     Carl has been working with Django since 2007 (long enough to remember
     queryset-refactor, but not magic-removal), and works as a freelance
-    developer with OddBird_ and Eldarion_. He became a Django contributor by
-    accident, because fixing bugs is more interesting than working around
-    them.
+    developer with OddBird_.  He became a Django contributor by accident,
+    because fixing bugs is more interesting than working around them.
 
-    Carl lives in Elkhart, IN, USA.
+    Carl lives in Rapid City, SD, USA.
 
-.. _Carl Meyer: http://www.oddbird.net/about/#hcard-carl
+.. _Carl Meyer: http://www.oddbird.net/
 .. _OddBird: http://www.oddbird.net/
 
 Ramiro Morales
@@ -322,12 +321,11 @@ Honza Král
     2007 while doing his PhD in Computing Sciences. Since then he has
     contributed patches to various components of the framework, in particular
     the admin. Julien was a co-founder of the `Interaction Consortium`_. He
-    now works as a freelance Web developer and interaction designer.
-
-    Julien lives in Sydney, Australia.
+    now works at Odopod_, a digital agency based in San Francisco, CA, USA.
 
 .. _Julien Phalip: http://julienphalip.com
 .. _Interaction Consortium: http://interaction.net.au
+.. _Odopod: http://odopod.com
 
 `Aymeric Augustin`_
     Aymeric is an engineer with a background in mathematics and computer
@@ -343,6 +341,19 @@ Honza Král
 
 .. _Aymeric Augustin: http://myks.org/
 .. _management consulting company: http://www.polyconseil.fr/
+
+`Claude Paroz`_
+    Claude is a former teacher who fell in love with free software at the
+    beginning of the 21st century. He's now working as freelancer in Web
+    development in his native Switzerland. He has found in Django a perfect
+    match for his needs of a stable, clean, documented and well-maintained Web
+    framework.
+
+    He's also helping the GNOME Translation Project as maintainer of the
+    Django-based `l10n.gnome.org`_.
+
+.. _Claude Paroz: http://www.2xlibre.net
+.. _l10n.gnome.org: http://l10n.gnome.org
 
 Specialists
 -----------

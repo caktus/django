@@ -85,16 +85,16 @@ class GenericForeignKey(object):
             ret_val.extend(ct.get_all_objects_for_this_type(pk__in=fkeys))
 
         # For doing the join in Python, we have to match both the FK val and the
-        # content type, so the 'attr' vals we return need to be callables that
-        # will return a (fk, class) pair.
+        # content type, so we use a callable that returns a (fk, class) pair.
         def gfk_key(obj):
             ct_id = getattr(obj, ct_attname)
             if ct_id is None:
                 return None
             else:
-                return (getattr(obj, self.fk_field),
-                        self.get_content_type(id=ct_id,
-                                              using=obj._state.db).model_class())
+                model = self.get_content_type(id=ct_id,
+                                              using=obj._state.db).model_class()
+                return (model._meta.pk.get_prep_value(getattr(obj, self.fk_field)),
+                        model)
 
         return (ret_val,
                 lambda obj: (obj._get_pk_val(), obj.__class__),
@@ -321,7 +321,7 @@ def create_generic_related_manager(superclass):
                 return super(GenericRelatedObjectManager, self).get_query_set().using(db).filter(**self.core_filters)
 
         def get_prefetch_query_set(self, instances):
-            db = self._db or router.db_for_read(self.model)
+            db = self._db or router.db_for_read(self.model, instance=instances[0])
             query = {
                 '%s__pk' % self.content_type_field_name: self.content_type.id,
                 '%s__in' % self.object_id_field_name:

@@ -98,8 +98,8 @@ class BaseForm(StrAndUnicode):
         return self.as_table()
 
     def __iter__(self):
-        for name, field in self.fields.items():
-            yield BoundField(self, field, name)
+        for name in self.fields:
+            yield self[name]
 
     def __getitem__(self, name):
         "Returns a BoundField with the given name."
@@ -145,7 +145,7 @@ class BaseForm(StrAndUnicode):
 
         for name, field in self.fields.items():
             html_class_attr = ''
-            bf = BoundField(self, field, name)
+            bf = self[name]
             bf_errors = self.error_class([conditional_escape(error) for error in bf.errors]) # Escape and cache in local variable.
             if bf.is_hidden:
                 if bf_errors:
@@ -410,6 +410,22 @@ class BoundField(StrAndUnicode):
             return self.as_widget() + self.as_hidden(only_initial=True)
         return self.as_widget()
 
+    def __iter__(self):
+        """
+        Yields rendered strings that comprise all widgets in this BoundField.
+
+        This really is only useful for RadioSelect widgets, so that you can
+        iterate over individual radio buttons in a template.
+        """
+        for subwidget in self.field.widget.subwidgets(self.html_name, self.value()):
+            yield subwidget
+
+    def __len__(self):
+        return len(list(self.__iter__()))
+
+    def __getitem__(self, idx):
+        return list(self.__iter__())[idx]
+
     def _errors(self):
         """
         Returns an ErrorList for this field. Returns an empty ErrorList
@@ -528,7 +544,7 @@ class BoundField(StrAndUnicode):
 
     def _id_for_label(self):
         """
-        Wrapper around the field widget's `id_for_label` class method.
+        Wrapper around the field widget's `id_for_label` method.
         Useful, for example, for focusing on this field regardless of whether
         it has a single widget or a MutiWidget.
         """

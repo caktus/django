@@ -3,29 +3,19 @@ from __future__ import absolute_import
 import datetime
 import os
 import re
+import sys
 import time
+import warnings
+
 from pprint import pformat
 from urllib import urlencode, quote
-from urlparse import urljoin
+from urlparse import urljoin, parse_qsl
 try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
-try:
-    # The mod_python version is more efficient, so try importing it first.
-    from mod_python.util import parse_qsl
-except ImportError:
-    try:
-        # Python 2.6 and greater
-        from urlparse import parse_qsl
-    except ImportError:
-        # Python 2.5.  Works on Python 2.6 but raises PendingDeprecationWarning
-        from cgi import parse_qsl
 
 import Cookie
-# httponly support exists in Python 2.6's Cookie library,
-# but not in Python 2.5.
-_morsel_supports_httponly = 'httponly' in Cookie.Morsel._reserved
 # Some versions of Python 2.7 and later won't need this encoding bug fix:
 _cookie_encodes_correctly = Cookie.SimpleCookie().value_encode(';') == (';', '"\\073"')
 # See ticket #13007, http://bugs.python.org/issue2193 and http://trac.edgewall.org/ticket/2256
@@ -36,28 +26,10 @@ try:
 except Cookie.CookieError:
     _cookie_allows_colon_in_names = False
 
-if _morsel_supports_httponly and _cookie_encodes_correctly and _cookie_allows_colon_in_names:
+if _cookie_encodes_correctly and _cookie_allows_colon_in_names:
     SimpleCookie = Cookie.SimpleCookie
 else:
-    if not _morsel_supports_httponly:
-        class Morsel(Cookie.Morsel):
-            def __setitem__(self, K, V):
-                K = K.lower()
-                if K == "httponly":
-                    if V:
-                        # The superclass rejects httponly as a key,
-                        # so we jump to the grandparent.
-                        super(Cookie.Morsel, self).__setitem__(K, V)
-                else:
-                    super(Morsel, self).__setitem__(K, V)
-
-            def OutputString(self, attrs=None):
-                output = super(Morsel, self).OutputString(attrs)
-                if "httponly" in self:
-                    output += "; httponly"
-                return output
-    else:
-        Morsel = Cookie.Morsel
+    Morsel = Cookie.Morsel
 
     class SimpleCookie(Cookie.SimpleCookie):
         if not _cookie_encodes_correctly:
@@ -69,7 +41,7 @@ else:
 
                 # SimpleCookie already does the hard work of encoding and decoding.
                 # It uses octal sequences like '\\012' for newline etc.
-                # and non-ASCII chars.  We just make use of this mechanism, to
+                # and non-ASCII chars. We just make use of this mechanism, to
                 # avoid introducing two encoding schemes which would be confusing
                 # and especially awkward for javascript.
 
@@ -85,7 +57,7 @@ else:
 
                 return val, encoded
 
-        if not _cookie_allows_colon_in_names or not _morsel_supports_httponly:
+        if not _cookie_allows_colon_in_names:
             def load(self, rawdata):
                 self.bad_cookies = set()
                 super(SimpleCookie, self).load(rawdata)
@@ -104,21 +76,16 @@ else:
                     dict.__setitem__(self, key, Cookie.Morsel())
 
 
-class CompatCookie(SimpleCookie):
-    def __init__(self, *args, **kwargs):
-        super(CompatCookie, self).__init__(*args, **kwargs)
-        import warnings
-        warnings.warn("CompatCookie is deprecated, use django.http.SimpleCookie instead.",
-                      DeprecationWarning)
-
 from django.conf import settings
 from django.core import signing
+from django.core.exceptions import ImproperlyConfigured
 from django.core.files import uploadhandler
 from django.http.multipartparser import MultiPartParser
 from django.http.utils import *
 from django.utils.datastructures import MultiValueDict, ImmutableList
 from django.utils.encoding import smart_str, iri_to_uri, force_unicode
 from django.utils.http import cookie_date
+from django.utils import timezone
 
 RESERVED_CHARS="!*'();:@&=+$,/?%#[]"
 
@@ -175,6 +142,8 @@ def build_request_repr(request, path_override=None, GET_override=None,
                       unicode(cookies),
                       unicode(meta)))
 
+class UnreadablePostError(IOError):
+    pass
 
 class HttpRequest(object):
     """A basic HTTP request."""
@@ -251,8 +220,22 @@ class HttpRequest(object):
             location = urljoin(current_uri, location)
         return iri_to_uri(location)
 
-    def is_secure(self):
+    def _is_secure(self):
         return os.environ.get("HTTPS") == "on"
+
+    def is_secure(self):
+        # First, check the SECURE_PROXY_SSL_HEADER setting.
+        if settings.SECURE_PROXY_SSL_HEADER:
+            try:
+                header, value = settings.SECURE_PROXY_SSL_HEADER
+            except ValueError:
+                raise ImproperlyConfigured('The SECURE_PROXY_SSL_HEADER setting must be a tuple containing two values.')
+            if self.META.get(header, None) == value:
+                return True
+
+        # Failing that, fall back to _is_secure(), which is a hook for
+        # subclasses to implement.
+        return self._is_secure()
 
     def is_ajax(self):
         return self.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
@@ -300,14 +283,22 @@ class HttpRequest(object):
         parser = MultiPartParser(META, post_data, self.upload_handlers, self.encoding)
         return parser.parse()
 
-    def _get_raw_post_data(self):
-        if not hasattr(self, '_raw_post_data'):
+    @property
+    def body(self):
+        if not hasattr(self, '_body'):
             if self._read_started:
-                raise Exception("You cannot access raw_post_data after reading from request's data stream")
-            self._raw_post_data = self.read()
-            self._stream = StringIO(self._raw_post_data)
-        return self._raw_post_data
-    raw_post_data = property(_get_raw_post_data)
+                raise Exception("You cannot access body after reading from request's data stream")
+            try:
+                self._body = self.read()
+            except IOError, e:
+                raise UnreadablePostError, e, sys.exc_traceback
+            self._stream = StringIO(self._body)
+        return self._body
+
+    @property
+    def raw_post_data(self):
+        warnings.warn('HttpRequest.raw_post_data has been deprecated. Use HttpRequest.body instead.', PendingDeprecationWarning)
+        return self.body
 
     def _mark_post_parse_error(self):
         self._post = QueryDict('')
@@ -319,37 +310,37 @@ class HttpRequest(object):
         if self.method != 'POST':
             self._post, self._files = QueryDict('', encoding=self._encoding), MultiValueDict()
             return
-        if self._read_started and not hasattr(self, '_raw_post_data'):
+        if self._read_started and not hasattr(self, '_body'):
             self._mark_post_parse_error()
             return
 
         if self.META.get('CONTENT_TYPE', '').startswith('multipart'):
-            if hasattr(self, '_raw_post_data'):
+            if hasattr(self, '_body'):
                 # Use already read data
-                data = StringIO(self._raw_post_data)
+                data = StringIO(self._body)
             else:
                 data = self
             try:
                 self._post, self._files = self.parse_file_upload(self.META, data)
             except:
-                # An error occured while parsing POST data.  Since when
+                # An error occured while parsing POST data. Since when
                 # formatting the error the request handler might access
                 # self.POST, set self._post and self._file to prevent
                 # attempts to parse POST data again.
-                # Mark that an error occured.  This allows self.__repr__ to
+                # Mark that an error occured. This allows self.__repr__ to
                 # be explicit about it instead of simply representing an
                 # empty POST
                 self._mark_post_parse_error()
                 raise
         else:
-            self._post, self._files = QueryDict(self.raw_post_data, encoding=self._encoding), MultiValueDict()
+            self._post, self._files = QueryDict(self.body, encoding=self._encoding), MultiValueDict()
 
     ## File-like and iterator interface.
     ##
     ## Expects self._stream to be set to an appropriate source of bytes by
-    ## a corresponding request subclass (WSGIRequest or ModPythonRequest).
+    ## a corresponding request subclass (e.g. WSGIRequest).
     ## Also when request data has already been read by request.POST or
-    ## request.raw_post_data, self._stream points to a StringIO instance
+    ## request.body, self._stream points to a StringIO instance
     ## containing that data.
 
     def read(self, *args, **kwargs):
@@ -538,11 +529,11 @@ class HttpResponse(object):
             content_type=None):
         # _headers is a mapping of the lower-case name to the original case of
         # the header (required for working with legacy systems) and the header
-        # value.  Both the name of the header and its value are ASCII strings.
+        # value. Both the name of the header and its value are ASCII strings.
         self._headers = {}
         self._charset = settings.DEFAULT_CHARSET
-        if mimetype:
-            content_type = mimetype     # For backwards compatibility
+        if mimetype: # For backwards compatibility.
+            content_type = mimetype
         if not content_type:
             content_type = "%s; charset=%s" % (settings.DEFAULT_CONTENT_TYPE,
                     self._charset)
@@ -587,6 +578,17 @@ class HttpResponse(object):
     def __getitem__(self, header):
         return self._headers[header.lower()][1]
 
+    def __getstate__(self):
+        # SimpleCookie is not pickeable with pickle.HIGHEST_PROTOCOL, so we
+        # serialise to a string instead
+        state = self.__dict__.copy()
+        state['cookies'] = str(state['cookies'])
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.cookies = SimpleCookie(self.cookies)
+
     def has_header(self, header):
         """Case-insensitive check for a header."""
         return header.lower() in self._headers
@@ -604,13 +606,18 @@ class HttpResponse(object):
         """
         Sets a cookie.
 
-        ``expires`` can be a string in the correct format or a
-        ``datetime.datetime`` object in UTC. If ``expires`` is a datetime
-        object then ``max_age`` will be calculated.
+        ``expires`` can be:
+        - a string in the correct format,
+        - a naive ``datetime.datetime`` object in UTC,
+        - an aware ``datetime.datetime`` object in any time zone.
+        If it is a ``datetime.datetime`` object then ``max_age`` will be calculated.
+
         """
         self.cookies[key] = value
         if expires is not None:
             if isinstance(expires, datetime.datetime):
+                if timezone.is_aware(expires):
+                    expires = timezone.make_naive(expires, timezone.utc)
                 delta = expires - expires.utcnow()
                 # Add one second so the date matches exactly (a fraction of
                 # time gets lost between converting to a timedelta and

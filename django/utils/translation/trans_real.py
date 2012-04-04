@@ -38,7 +38,7 @@ accept_language_re = re.compile(r'''
         (?:\s*,\s*|$)                                 # Multiple accepts per header.
         ''', re.VERBOSE)
 
-language_code_prefix_re = re.compile(r'^/([\w-]+)/')
+language_code_prefix_re = re.compile(r'^/([\w-]+)(/|$)')
 
 def to_locale(language, to_lower=False):
     """
@@ -111,13 +111,6 @@ def translation(language):
 
     globalpath = os.path.join(os.path.dirname(sys.modules[settings.__module__].__file__), 'locale')
 
-    if settings.SETTINGS_MODULE is not None:
-        parts = settings.SETTINGS_MODULE.split('.')
-        project = import_module(parts[0])
-        projectpath = os.path.join(os.path.dirname(project.__file__), 'locale')
-    else:
-        projectpath = None
-
     def _fetch(lang, fallback=None):
 
         global _translations
@@ -162,11 +155,6 @@ def translation(language):
 
             if os.path.isdir(apppath):
                 res = _merge(apppath)
-
-        localepaths = [os.path.normpath(path) for path in settings.LOCALE_PATHS]
-        if (projectpath and os.path.isdir(projectpath) and
-                os.path.normpath(projectpath) not in localepaths):
-            res = _merge(projectpath)
 
         for localepath in reversed(settings.LOCALE_PATHS):
             if os.path.isdir(localepath):
@@ -363,20 +351,24 @@ def get_language_from_path(path, supported=None):
         if lang_code in supported and check_for_language(lang_code):
             return lang_code
 
-def get_language_from_request(request):
+def get_language_from_request(request, check_path=False):
     """
     Analyzes the request to find what language the user wants the system to
     show. Only languages listed in settings.LANGUAGES are taken into account.
     If the user requests a sublanguage where we have a main language, we send
     out the main language.
+
+    If check_path is True, the URL path prefix will be checked for a language
+    code, otherwise this is skipped for backwards compatibility.
     """
     global _accepted
     from django.conf import settings
     supported = dict(settings.LANGUAGES)
 
-    lang_code = get_language_from_path(request.path_info, supported)
-    if lang_code is not None:
-        return lang_code
+    if check_path:
+        lang_code = get_language_from_path(request.path_info, supported)
+        if lang_code is not None:
+            return lang_code
 
     if hasattr(request, 'session'):
         lang_code = request.session.get('django_language', None)
@@ -439,6 +431,7 @@ block_re = re.compile(r"""^\s*blocktrans(\s+.*context\s+(?:"[^"]*?")|(?:'[^']*?'
 endblock_re = re.compile(r"""^\s*endblocktrans$""")
 plural_re = re.compile(r"""^\s*plural$""")
 constant_re = re.compile(r"""_\(((?:".*?")|(?:'.*?'))\)""")
+one_percent_re = re.compile(r"""(?<!%)%(?!%)""")
 
 
 def templatize(src, origin=None):
@@ -513,7 +506,7 @@ def templatize(src, origin=None):
                 else:
                     singular.append('%%(%s)s' % t.contents)
             elif t.token_type == TOKEN_TEXT:
-                contents = t.contents.replace('%', '%%')
+                contents = one_percent_re.sub('%%', t.contents)
                 if inplural:
                     plural.append(contents)
                 else:
@@ -529,6 +522,7 @@ def templatize(src, origin=None):
                         g = g.strip('"')
                     elif g[0] == "'":
                         g = g.strip("'")
+                    g = one_percent_re.sub('%%', g)
                     if imatch.group(2):
                         # A context is provided
                         context_match = context_re.match(imatch.group(2))

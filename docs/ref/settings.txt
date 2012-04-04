@@ -6,6 +6,13 @@ Settings
     :local:
     :depth: 1
 
+.. warning::
+
+    Be careful when you override settings, especially when the default value
+    is a non-empty tuple or dictionary, such as :setting:`MIDDLEWARE_CLASSES`
+    and :setting:`TEMPLATE_CONTEXT_PROCESSORS`. Make sure you keep the
+    components required by the features of Django you wish to use.
+
 Available settings
 ==================
 
@@ -697,11 +704,13 @@ Default::
     '%b %d, %Y', '%d %b %Y', '%d %b, %Y', '%B %d %Y',
     '%B %d, %Y', '%d %B %Y', '%d %B, %Y')
 
-A tuple of formats that will be accepted when inputting data on a date
-field. Formats will be tried in order, using the first valid.
-Note that these format strings are specified in Python's datetime_ module
-syntax, that is different from the one used by Django for formatting dates
-to be displayed.
+A tuple of formats that will be accepted when inputting data on a date field.
+Formats will be tried in order, using the first valid one. Note that these
+format strings use Python's datetime_ module syntax, not the format strings
+from the ``date`` Django template tag.
+
+When :setting:`USE_L10N` is ``True``, the locale-dictated format has higher
+precedence and will be applied instead.
 
 See also :setting:`DATETIME_INPUT_FORMATS` and :setting:`TIME_INPUT_FORMATS`.
 
@@ -738,10 +747,12 @@ Default::
     '%m/%d/%y %H:%M:%S', '%m/%d/%y %H:%M', '%m/%d/%y')
 
 A tuple of formats that will be accepted when inputting data on a datetime
-field. Formats will be tried in order, using the first valid.
-Note that these format strings are specified in Python's datetime_ module
-syntax, that is different from the one used by Django for formatting dates
-to be displayed.
+field. Formats will be tried in order, using the first valid one. Note that
+these format strings use Python's datetime_ module syntax, not the format
+strings from the ``date`` Django template tag.
+
+When :setting:`USE_L10N` is ``True``, the locale-dictated format has higher
+precedence and will be applied instead.
 
 See also :setting:`DATE_INPUT_FORMATS` and :setting:`TIME_INPUT_FORMATS`.
 
@@ -756,24 +767,46 @@ Default: ``False``
 
 A boolean that turns on/off debug mode.
 
-If you define custom settings, `django/views/debug.py`_ has a ``HIDDEN_SETTINGS``
-regular expression which will hide from the DEBUG view anything that contains
-``'SECRET'``, ``'PASSWORD'``, ``'PROFANITIES'``, or ``'SIGNATURE'``. This allows
-untrusted users to be able to give backtraces without seeing sensitive (or
-offensive) settings.
+Never deploy a site into production with :setting:`DEBUG` turned on.
 
-Still, note that there are always going to be sections of your debug output that
-are inappropriate for public consumption. File paths, configuration options, and
-the like all give attackers extra information about your server.
+Did you catch that? NEVER deploy a site into production with :setting:`DEBUG`
+turned on.
+
+One of the main features of debug mode is the display of detailed error pages.
+If your app raises an exception when ``DEBUG`` is ``True``, Django will display
+a detailed traceback, including a lot of metadata about your environment, such
+as all the currently defined Django settings (from ``settings.py``).
+
+As a security measure, Django will *not* include settings that might be
+sensitive (or offensive), such as ``SECRET_KEY`` or ``PROFANITIES_LIST``.
+Specifically, it will exclude any setting whose name includes any of the
+following:
+
+    * API
+    * KEY
+    * PASS
+    * PROFANITIES_LIST
+    * SECRET
+    * SIGNATURE
+    * TOKEN
+
+.. versionchanged:: 1.4
+
+    We changed ``'PASSWORD'`` ``'PASS'``. ``'API'``, ``'TOKEN'`` and ``'KEY'``
+    were added.
+
+Note that these are *partial* matches. ``'PASS'`` will also match PASSWORD,
+just as ``'TOKEN'`` will also match TOKENIZED and so on.
+
+Still, note that there are always going to be sections of your debug output
+that are inappropriate for public consumption. File paths, configuration
+options and the like all give attackers extra information about your server.
 
 It is also important to remember that when running with :setting:`DEBUG`
 turned on, Django will remember every SQL query it executes. This is useful
-when you are debugging, but on a production server, it will rapidly consume
-memory.
+when you're debugging, but it'll rapidly consume memory on a production server.
 
-Never deploy a site into production with :setting:`DEBUG` turned on.
-
-.. _django/views/debug.py: http://code.djangoproject.com/browser/django/trunk/django/views/debug.py
+.. _django/views/debug.py: https://code.djangoproject.com/browser/django/trunk/django/views/debug.py
 
 DEBUG_PROPAGATE_EXCEPTIONS
 --------------------------
@@ -1072,9 +1105,12 @@ FIXTURE_DIRS
 
 Default: ``()`` (Empty tuple)
 
-List of locations of the fixture data files, in search order. Note that
-these paths should use Unix-style forward slashes, even on Windows. See
-:doc:`/topics/testing`.
+List of directories searched for fixture files, in addition to the
+``fixtures`` directory of each application, in search order.
+
+Note that these paths should use Unix-style forward slashes, even on Windows.
+
+See :ref:`initial-data-via-fixtures` and :ref:`topics-testing-fixtures`.
 
 FORCE_SCRIPT_NAME
 ------------------
@@ -1201,7 +1237,7 @@ and including a copy here would inevitably become rapidly out of date. You can
 see the current list of translated languages by looking in
 ``django/conf/global_settings.py`` (or view the `online source`_).
 
-.. _online source: http://code.djangoproject.com/browser/django/trunk/django/conf/global_settings.py
+.. _online source: https://code.djangoproject.com/browser/django/trunk/django/conf/global_settings.py
 
 The list is a tuple of two-tuples in the format ``(language code, language
 name)``, the ``language code`` part should be a
@@ -1303,6 +1339,26 @@ The URL where requests are redirected after login when the
 This is used by the :func:`~django.contrib.auth.decorators.login_required`
 decorator, for example.
 
+.. _`note on LOGIN_REDIRECT_URL setting`:
+
+.. note::
+    You can use :func:`~django.core.urlresolvers.reverse_lazy` to reference
+    URLs by their name instead of providing a hardcoded value. Assuming a
+    ``urls.py`` with an URLpattern named ``home``::
+
+        urlpatterns = patterns('',
+            url('^welcome/$', 'test_app.views.home', name='home'),
+        )
+
+    You can use :func:`~django.core.urlresolvers.reverse_lazy` like this::
+
+        from django.core.urlresolvers import reverse_lazy
+
+        LOGIN_REDIRECT_URL = reverse_lazy('home')
+
+    This also works fine with localized URLs using
+    :func:`~django.conf.urls.i18n.i18n_patterns`.
+
 .. setting:: LOGIN_URL
 
 LOGIN_URL
@@ -1313,6 +1369,9 @@ Default: ``'/accounts/login/'``
 The URL where requests are redirected for login, especially when using the
 :func:`~django.contrib.auth.decorators.login_required` decorator.
 
+.. note::
+    See the `note on LOGIN_REDIRECT_URL setting`_
+
 .. setting:: LOGOUT_URL
 
 LOGOUT_URL
@@ -1321,6 +1380,9 @@ LOGOUT_URL
 Default: ``'/accounts/logout/'``
 
 LOGIN_URL counterpart.
+
+.. note::
+    See the `note on LOGIN_REDIRECT_URL setting`_
 
 .. setting:: MANAGERS
 
@@ -1528,6 +1590,66 @@ A secret key for this particular Django installation. Used to provide a seed in
 secret-key hashing algorithms. Set this to a random string -- the longer, the
 better. ``django-admin.py startproject`` creates one automatically.
 
+.. setting:: SECURE_PROXY_SSL_HEADER
+
+SECURE_PROXY_SSL_HEADER
+-----------------------
+
+.. versionadded:: 1.4
+
+Default: ``None``
+
+A tuple representing a HTTP header/value combination that signifies a request
+is secure. This controls the behavior of the request object's ``is_secure()``
+method.
+
+This takes some explanation. By default, ``is_secure()`` is able to determine
+whether a request is secure by looking at whether the requested URL uses
+"https://".
+
+If your Django app is behind a proxy, though, the proxy may be "swallowing" the
+fact that a request is HTTPS, using a non-HTTPS connection between the proxy
+and Django. In this case, ``is_secure()`` would always return ``False`` -- even
+for requests that were made via HTTPS by the end user.
+
+In this situation, you'll want to configure your proxy to set a custom HTTP
+header that tells Django whether the request came in via HTTPS, and you'll want
+to set ``SECURE_PROXY_SSL_HEADER`` so that Django knows what header to look
+for.
+
+You'll need to set a tuple with two elements -- the name of the header to look
+for and the required value. For example::
+
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTOCOL', 'https')
+
+Here, we're telling Django that we trust the ``X-Forwarded-Protocol`` header
+that comes from our proxy, and any time its value is ``'https'``, then the
+request is guaranteed to be secure (i.e., it originally came in via HTTPS).
+Obviously, you should *only* set this setting if you control your proxy or
+have some other guarantee that it sets/strips this header appropriately.
+
+Note that the header needs to be in the format as used by ``request.META`` --
+all caps and likely starting with ``HTTP_``. (Remember, Django automatically
+adds ``'HTTP_'`` to the start of x-header names before making the header
+available in ``request.META``.)
+
+.. warning::
+
+    **You will probably open security holes in your site if you set this without knowing what you're doing. Seriously.**
+
+    Make sure ALL of the following are true before setting this (assuming the
+    values from the example above):
+
+    * Your Django app is behind a proxy.
+    * Your proxy strips the 'X-Forwarded-Protocol' header from all incoming
+      requests. In other words, if end users include that header in their
+      requests, the proxy will discard it.
+    * Your proxy sets the 'X-Forwarded-Protocol' header and sends it to Django,
+      but only for requests that originally come in via HTTPS.
+
+    If any of those are not true, you should keep this setting set to ``None``
+    and find another way of determining HTTPS, perhaps via custom middleware.
+
 .. setting:: SEND_BROKEN_LINK_EMAILS
 
 SEND_BROKEN_LINK_EMAILS
@@ -1589,7 +1711,7 @@ domain cookie. See the :doc:`/topics/http/sessions`.
 SESSION_COOKIE_HTTPONLY
 -----------------------
 
-Default: ``False``
+Default: ``True``
 
 Whether to use HTTPOnly flag on the session cookie. If this is set to
 ``True``, client-side JavaScript will not to be able to access the
@@ -1602,6 +1724,9 @@ useful way to mitigate the risk of client side script accessing the
 protected cookie data.
 
 .. _HTTPOnly: http://www.owasp.org/index.php/HTTPOnly
+
+.. versionchanged:: 1.4
+    The default value of the setting was changed from ``False`` to ``True``.
 
 .. setting:: SESSION_COOKIE_NAME
 
@@ -1653,6 +1778,7 @@ Controls where Django stores session data. Valid values are:
 * ``'django.contrib.sessions.backends.file'``
 * ``'django.contrib.sessions.backends.cache'``
 * ``'django.contrib.sessions.backends.cached_db'``
+* ``'django.contrib.sessions.backends.signed_cookies'``
 
 See :doc:`/topics/http/sessions`.
 
@@ -1810,6 +1936,7 @@ Default::
     "django.core.context_processors.i18n",
     "django.core.context_processors.media",
     "django.core.context_processors.static",
+    "django.core.context_processors.tz",
     "django.contrib.messages.context_processors.messages")
 
 A tuple of callables that are used to populate the context in ``RequestContext``.
@@ -1828,6 +1955,10 @@ of items to be merged into the context.
 
 .. versionadded:: 1.3
     The ``django.core.context_processors.static`` context processor
+    was added in this release.
+
+.. versionadded:: 1.4
+    The ``django.core.context_processors.tz`` context processor
     was added in this release.
 
 .. setting:: TEMPLATE_DEBUG
@@ -1854,8 +1985,10 @@ TEMPLATE_DIRS
 
 Default: ``()`` (Empty tuple)
 
-List of locations of the template source files, in search order. Note that
-these paths should use Unix-style forward slashes, even on Windows.
+List of locations of the template source files searched by
+:class:`django.template.loaders.filesystem.Loader`, in search order.
+
+Note that these paths should use Unix-style forward slashes, even on Windows.
 
 See :doc:`/topics/templates`.
 
@@ -1951,11 +2084,13 @@ TIME_INPUT_FORMATS
 
 Default: ``('%H:%M:%S', '%H:%M')``
 
-A tuple of formats that will be accepted when inputting data on a time
-field. Formats will be tried in order, using the first valid.
-Note that these format strings are specified in Python's datetime_ module
-syntax, that is different from the one used by Django for formatting dates
-to be displayed.
+A tuple of formats that will be accepted when inputting data on a time field.
+Formats will be tried in order, using the first valid one. Note that these
+format strings use Python's datetime_ module syntax, not the format strings
+from the ``date`` Django template tag.
+
+When :setting:`USE_L10N` is ``True``, the locale-dictated format has higher
+precedence and will be applied instead.
 
 See also :setting:`DATE_INPUT_FORMATS` and :setting:`DATETIME_INPUT_FORMATS`.
 
@@ -1971,6 +2106,9 @@ Default: ``'America/Chicago'``
 .. versionchanged:: 1.2
    ``None`` was added as an allowed value.
 
+.. versionchanged:: 1.4
+   The meaning of this setting now depends on the value of :setting:`USE_TZ`.
+
 A string representing the time zone for this installation, or
 ``None``. `See available choices`_. (Note that list of available
 choices lists more than one on the same line; you'll want to use just
@@ -1978,46 +2116,40 @@ one of the choices for a given time zone. For instance, one line says
 ``'Europe/London GB GB-Eire'``, but you should use the first bit of
 that -- ``'Europe/London'`` -- as your :setting:`TIME_ZONE` setting.)
 
-Note that this is the time zone to which Django will convert all
-dates/times -- not necessarily the timezone of the server. For
-example, one server may serve multiple Django-powered sites, each with
-a separate time-zone setting.
+Note that this isn't necessarily the time zone of the server. For example, one
+server may serve multiple Django-powered sites, each with a separate time zone
+setting.
 
-Normally, Django sets the ``os.environ['TZ']`` variable to the time
-zone you specify in the :setting:`TIME_ZONE` setting. Thus, all your views
-and models will automatically operate in the correct time zone.
-However, Django won't set the ``TZ`` environment variable under the
-following conditions:
+When :setting:`USE_TZ` is ``False``, this is the time zone in which Django
+will store all datetimes. When :setting:`USE_TZ` is ``True``, this is the
+default time zone that Django will use to display datetimes in templates and
+to interpret datetimes entered in forms.
+
+Django sets the ``os.environ['TZ']`` variable to the time zone you specify in
+the :setting:`TIME_ZONE` setting. Thus, all your views and models will
+automatically operate in this time zone. However, Django won't set the ``TZ``
+environment variable under the following conditions:
 
 * If you're using the manual configuration option as described in
   :ref:`manually configuring settings
   <settings-without-django-settings-module>`, or
 
-* If you specify ``TIME_ZONE = None``. This will cause Django to fall
-  back to using the system timezone.
+* If you specify ``TIME_ZONE = None``. This will cause Django to fall back to
+  using the system timezone. However, this is discouraged when :setting:`USE_TZ
+  = True <USE_TZ>`, because it makes conversions between local time and UTC
+  less reliable.
 
 If Django doesn't set the ``TZ`` environment variable, it's up to you
 to ensure your processes are running in the correct environment.
 
 .. note::
-    Django cannot reliably use alternate time zones in a Windows
-    environment. If you're running Django on Windows, this variable
-    must be set to match the system timezone.
-
+    Django cannot reliably use alternate time zones in a Windows environment.
+    If you're running Django on Windows, :setting:`TIME_ZONE` must be set to
+    match the system time zone.
 
 .. _See available choices: http://www.postgresql.org/docs/8.1/static/datetime-keywords.html#DATETIME-TIMEZONE-SET-TABLE
 
-.. setting:: URL_VALIDATOR_USER_AGENT
-
-URL_VALIDATOR_USER_AGENT
-------------------------
-
-Default: ``Django/<version> (http://www.djangoproject.com/)``
-
-The string to use as the ``User-Agent`` header when checking to see if
-URLs exist (see the ``verify_exists`` option on
-:class:`~django.db.models.URLField`). This setting was deprecated in
-1.3.1 along with ``verify_exists`` and will be removed in 1.4.
+.. _pytz: http://pytz.sourceforge.net/
 
 .. setting:: USE_ETAGS
 
@@ -2043,7 +2175,7 @@ This provides an easy way to turn it off, for performance. If this is set to
 ``False``, Django will make some optimizations so as not to load the
 translation machinery.
 
-See also :setting:`USE_L10N`
+See also :setting:`LANGUAGE_CODE`, :setting:`USE_L10N` and :setting:`USE_TZ`.
 
 .. setting:: USE_L10N
 
@@ -2058,7 +2190,7 @@ A boolean that specifies if localized formatting of data will be enabled by
 default or not. If this is set to ``True``, e.g. Django will display numbers and
 dates using the format of the current locale.
 
-See also :setting:`USE_I18N` and :setting:`LANGUAGE_CODE`
+See also :setting:`LANGUAGE_CODE`, :setting:`USE_I18N` and :setting:`USE_TZ`.
 
 .. note::
 
@@ -2081,6 +2213,27 @@ When :setting:`USE_L10N` is set to ``True`` and if this is also set to
 
 See also :setting:`DECIMAL_SEPARATOR`, :setting:`NUMBER_GROUPING` and
 :setting:`THOUSAND_SEPARATOR`.
+
+.. setting:: USE_TZ
+
+USE_TZ
+------
+
+.. versionadded:: 1.4
+
+Default: ``False``
+
+A boolean that specifies if datetimes will be timezone-aware by default or not.
+If this is set to ``True``, Django will use timezone-aware datetimes internally.
+Otherwise, Django will use naive datetimes in local time.
+
+See also :setting:`TIME_ZONE`, :setting:`USE_I18N` and :setting:`USE_L10N`.
+
+.. note::
+
+    The default :file:`settings.py` file created by
+    :djadmin:`django-admin.py startproject <startproject>` includes
+    ``USE_TZ = True`` for convenience.
 
 .. setting:: USE_X_FORWARDED_HOST
 
@@ -2182,3 +2335,12 @@ IGNORABLE_404_STARTS
 
 .. deprecated:: 1.4
    This setting has been superseded by :setting:`IGNORABLE_404_URLS`.
+
+.. setting:: URL_VALIDATOR_USER_AGENT
+
+URL_VALIDATOR_USER_AGENT
+------------------------
+
+.. deprecated:: 1.5
+    This value was used as the ``User-Agent`` header when checking if a URL
+    exists, a feature that was removed due to security and performance issues.

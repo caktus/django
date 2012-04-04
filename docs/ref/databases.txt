@@ -33,6 +33,26 @@ aggregate with a database backend that falls within the affected release range.
 .. _known to be faulty: http://archives.postgresql.org/pgsql-bugs/2007-07/msg00046.php
 .. _Release 8.2.5: http://developer.postgresql.org/pgdocs/postgres/release-8-2-5.html
 
+Optimizing PostgreSQL's configuration
+-------------------------------------
+
+Django needs the following parameters for its database connections:
+
+- ``client_encoding``: ``'UTF8'``,
+- ``default_transaction_isolation``: ``'read committed'``,
+- ``timezone``: ``'UTC'`` when :setting:`USE_TZ` is ``True``, value of
+  :setting:`TIME_ZONE` otherwise.
+
+If these parameters already have the correct values, Django won't set them for
+every new connection, which improves performance slightly. You can configure
+them directly in :file:`postgresql.conf` or more conveniently per database
+user with `ALTER ROLE`_.
+
+Django will work just fine without this optimization, but each new connection
+will do some additional queries to set these parameters.
+
+.. _ALTER ROLE: http://www.postgresql.org/docs/current/interactive/sql-alterrole.html
+
 Transaction handling
 ---------------------
 
@@ -48,9 +68,8 @@ Autocommit mode
 
 If your application is particularly read-heavy and doesn't make many
 database writes, the overhead of a constantly open transaction can
-sometimes be noticeable. For those situations, if you're using the
-``postgresql_psycopg2`` backend, you can configure Django to use
-*"autocommit"* behavior for the connection, meaning that each database
+sometimes be noticeable. For those situations, you can configure Django
+to use *"autocommit"* behavior for the connection, meaning that each database
 operation will normally be in its own transaction, rather than having
 the transaction extend over multiple operations. In this case, you can
 still manually start a transaction if you're doing something that
@@ -135,12 +154,14 @@ Storage engines
 MySQL has several `storage engines`_ (previously called table types). You can
 change the default storage engine in the server configuration.
 
-The default engine is MyISAM_ [#]_. The main drawback of MyISAM is that it
-doesn't currently support transactions or foreign keys. On the plus side, it's
-currently the only engine that supports full-text indexing and searching.
+Until MySQL 5.5.4, the default engine was MyISAM_ [#]_. The main drawbacks of
+MyISAM are that it doesn't support transactions or enforce foreign-key
+constraints. On the plus side, it's currently the only engine that supports
+full-text indexing and searching.
 
-The InnoDB_ engine is fully transactional and supports foreign key references
-and is probably the best choice at this point in time.
+Since MySQL 5.5.5, the default storage engine is InnoDB_. This engine is fully
+transactional and supports foreign key references. It's probably the best
+choice at this point.
 
 .. versionchanged:: 1.4
 
@@ -324,7 +345,7 @@ storage engine, you have a couple of options.
 * Another method for changing the storage engine is described in
   AlterModelOnSyncDB_.
 
-.. _AlterModelOnSyncDB: http://code.djangoproject.com/wiki/AlterModelOnSyncDB
+.. _AlterModelOnSyncDB: https://code.djangoproject.com/wiki/AlterModelOnSyncDB
 
 Table names
 -----------
@@ -434,22 +455,11 @@ Versions of SQLite 3.3.5 and older contains the following bugs:
   DecimalFields.
 
 .. _handling: http://www.sqlite.org/cvstrac/tktview?tn=1768
-.. _aggregation: http://code.djangoproject.com/ticket/10031
+.. _aggregation: https://code.djangoproject.com/ticket/10031
 
 SQLite 3.3.6 was released in April 2006, so most current binary distributions
 for different platforms include newer version of SQLite usable from Python
 through either the ``pysqlite2`` or the ``sqlite3`` modules.
-
-However, some platform/Python version combinations include older versions of
-SQLite (e.g. the official binary distribution of Python 2.5 for Windows, 2.5.4
-as of this writing, includes SQLite 3.3.4). There are (as of Django 1.1) even
-some tests in the Django test suite that will fail when run under this setup.
-
-As described :ref:`below<using-newer-versions-of-pysqlite>`, this can be solved
-by downloading and installing a newer version of ``pysqlite2``
-(``pysqlite-2.x.x.win32-py2.5.exe`` in the described case) that includes and
-uses a newer version of SQLite. Python 2.6 for Windows ships with a version of
-SQLite that is not affected by these issues.
 
 Version 3.5.9
 -------------
